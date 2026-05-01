@@ -31,8 +31,14 @@ export async function apiClip(path, start, end, exact = true) {
   return r.blob();
 }
 
+export async function apiTracksForVideo(sourceRelPath) {
+  const r = await fetch(`/tracks_for_video?path=${encodeURIComponent(sourceRelPath)}`);
+  if (!r.ok) throw new Error(`tracks_for_video ${r.status}`);
+  return r.json();
+}
+
 // FormData-based track call with bounding box
-export async function apiTrack(videoBlob, bbox, srcWidth, srcHeight, config) {
+export async function apiTrack(videoBlob, bbox, srcWidth, srcHeight, config, clipMeta = {}) {
   const fd = new FormData();
   fd.append('video', videoBlob, 'clip.mp4');
   fd.append('x1', String(Math.round(bbox.x1)));
@@ -48,6 +54,11 @@ export async function apiTrack(videoBlob, bbox, srcWidth, srcHeight, config) {
   fd.append('mask_b', String(rgb.b));
   fd.append('draw_box', config.drawBox ? 'true' : 'false');
   fd.append('sample_fps', String(config.sampleFps));
+  if (clipMeta.sourcePath) fd.append('source_path', clipMeta.sourcePath);
+  if (clipMeta.clipStartSec != null && clipMeta.clipEndSec != null) {
+    fd.append('clip_start_sec', String(clipMeta.clipStartSec));
+    fd.append('clip_end_sec', String(clipMeta.clipEndSec));
+  }
 
   const r = await fetch('/track', { method: 'POST', body: fd });
   if (!r.ok) {
@@ -58,7 +69,7 @@ export async function apiTrack(videoBlob, bbox, srcWidth, srcHeight, config) {
 }
 
 // FormData-based track call with brush mask
-export async function apiTrackBrush(videoBlob, maskBlob, srcWidth, srcHeight, config) {
+export async function apiTrackBrush(videoBlob, maskBlob, srcWidth, srcHeight, config, clipMeta = {}) {
   const fd = new FormData();
   fd.append('video', videoBlob, 'clip.mp4');
   fd.append('mask_png', maskBlob, 'mask.png');
@@ -71,6 +82,11 @@ export async function apiTrackBrush(videoBlob, maskBlob, srcWidth, srcHeight, co
   fd.append('mask_b', String(rgb.b));
   fd.append('draw_box', config.drawBox ? 'true' : 'false');
   fd.append('sample_fps', String(config.sampleFps));
+  if (clipMeta.sourcePath) fd.append('source_path', clipMeta.sourcePath);
+  if (clipMeta.clipStartSec != null && clipMeta.clipEndSec != null) {
+    fd.append('clip_start_sec', String(clipMeta.clipStartSec));
+    fd.append('clip_end_sec', String(clipMeta.clipEndSec));
+  }
 
   const r = await fetch('/track_brush', { method: 'POST', body: fd });
   if (!r.ok) {

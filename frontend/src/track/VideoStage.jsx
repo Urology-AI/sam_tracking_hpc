@@ -20,7 +20,7 @@ function getScale(containerW, containerH, fW, fH) {
 }
 
 const VideoStage = forwardRef(function VideoStage(
-  { videoRef, mode, stage, onBboxChange, onBrushChange, onVideoLoaded, onTimeUpdate },
+  { videoRef, mode, stage, onBboxChange, onBrushChange, onVideoLoaded, onVideoError, onTimeUpdate },
   ref
 ) {
   const containerRef    = useRef(null);
@@ -457,7 +457,9 @@ const VideoStage = forwardRef(function VideoStage(
           display: stage === 'video' ? 'block' : 'none',
           objectFit: 'contain',
         }}
+        preload="auto"
         onLoadedMetadata={onVideoLoaded}
+        onError={onVideoError}
         onTimeUpdate={onTimeUpdate}
         playsInline
         controls={false}

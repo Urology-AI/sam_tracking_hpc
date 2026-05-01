@@ -7,26 +7,17 @@ function fmt(secs) {
   return `${m}:${s}`;
 }
 
-export default function PlaybackPanel({
+export function ClipRangeSidebar({
   videoRef,
   vReady,
-  currentTime,
-  duration,
   cIn,
   cOut,
   setCIn,
   setCOut,
   onExtractClip,
-  onCaptureFrame,
   clipBlob,
 }) {
-  const play  = useCallback(() => videoRef.current?.play(), [videoRef]);
-  const pause = useCallback(() => videoRef.current?.pause(), [videoRef]);
-  const skip  = useCallback((delta) => {
-    if (videoRef.current) videoRef.current.currentTime += delta;
-  }, [videoRef]);
-
-  const setIn  = useCallback(() => {
+  const setIn = useCallback(() => {
     if (videoRef.current) setCIn(videoRef.current.currentTime);
   }, [videoRef, setCIn]);
 
@@ -37,24 +28,7 @@ export default function PlaybackPanel({
   const canExtract = vReady && (cIn !== null || cOut !== null);
 
   return (
-    <div className="playback-panel">
-      {/* Transport controls */}
-      <div className="playback-controls">
-        <button className="btn" onClick={() => skip(-1)} disabled={!vReady} title="–1s">«</button>
-        <button className="btn" onClick={() => skip(-0.1)} disabled={!vReady} title="–0.1s">‹</button>
-        <button className="btn btn-accent" onClick={play}  disabled={!vReady} title="Play">▶</button>
-        <button className="btn" onClick={pause} disabled={!vReady} title="Pause">⏸</button>
-        <button className="btn" onClick={() => skip(0.1)} disabled={!vReady} title="+0.1s">›</button>
-        <button className="btn" onClick={() => skip(1)}   disabled={!vReady} title="+1s">»</button>
-      </div>
-
-      <div className="time-display">
-        {fmt(currentTime)} / {fmt(duration)}
-      </div>
-
-      <div className="divider" />
-
-      {/* In/Out range */}
+    <div className="playback-panel playback-panel-sidebar playback-panel-clip">
       <div className="panel-title">Clip Range</div>
       <div className="range-row">
         <button className="btn" onClick={setIn} disabled={!vReady} title="Set In point (I)">
@@ -92,20 +66,10 @@ export default function PlaybackPanel({
           ✓ Clip loaded ({(clipBlob.size / 1024 / 1024).toFixed(2)} MB)
         </div>
       )}
-
-      <div className="divider" />
-
-      {/* Frame capture */}
-      <div className="panel-title">Frame</div>
-      <button
-        className="btn btn-accent"
-        style={{ width: '100%' }}
-        onClick={onCaptureFrame}
-        disabled={!vReady}
-        title="Capture current frame for annotation (C)"
-      >
-        Capture Frame
-      </button>
     </div>
   );
+}
+
+export default function PlaybackPanel(props) {
+  return <ClipRangeSidebar {...props} />;
 }

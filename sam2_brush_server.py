@@ -50,6 +50,13 @@ parser.add_argument("--port", type=int, default=8890)
 parser.add_argument("--host", type=str, default="0.0.0.0")
 parser.add_argument("--video-dir", type=str, default=".")
 parser.add_argument("--projects-dir", type=str, default="./projects")
+parser.add_argument(
+    "--track-dir",
+    type=str,
+    default="",
+    help="Directory for SAM2 track job outputs (default: <projects-dir>/track_jobs). "
+    "Use a persistent path so tracks survive server restarts.",
+)
 parser.add_argument("--sam2-checkpoint", type=str,
                     default=os.environ.get("SAM2_CHECKPOINT", "./checkpoints/sam2.1_hiera_large.pt"))
 parser.add_argument("--sam2-config", type=str,
@@ -60,20 +67,28 @@ args, _ = parser.parse_known_args()
 VIDEO_DIR = os.path.abspath(args.video_dir)
 PROJECTS_DIR = os.path.abspath(args.projects_dir)
 CLIP_DIR = tempfile.mkdtemp(prefix="sam2_clips_")
-TRACK_DIR = tempfile.mkdtemp(prefix="sam2_tracks_")
+_track_arg = (args.track_dir or "").strip()
+TRACK_DIR = os.path.abspath(_track_arg) if _track_arg else os.path.join(PROJECTS_DIR, "track_jobs")
 
 os.makedirs(PROJECTS_DIR, exist_ok=True)
+os.makedirs(TRACK_DIR, exist_ok=True)
+
+TRACK_CATALOG_PATH = os.path.join(PROJECTS_DIR, "tracks_catalog.json")
+# Subdirs of PROJECTS_DIR that are not dataset curation projects (pair export).
+PROJECT_DIR_SKIP_NAMES = frozenset({"track_jobs"})
 
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 OBJ_ID = 1
 
 print(f"[server] Video directory:  {VIDEO_DIR}")
 print(f"[server] Projects directory: {PROJECTS_DIR}")
+print(f"[server] Track catalog file: {TRACK_CATALOG_PATH}")
 print(f"[server] Clip temp dir:    {CLIP_DIR}")
-print(f"[server] Track temp dir:   {TRACK_DIR}")
+print(f"[server] Track jobs dir:   {TRACK_DIR}")
 print(f"[server] Device: {DEVICE}")
 
-# Verify ffmpeg
+# Verify ffmpeg. For /clip exact=True: prefer libx264 re-encode; else stream-copy (no transcode).
+# Skip libopenh264: conda ffmpeg often hits "Incorrect library version loaded" vs system libopenh264.
 try:
     result = subprocess.run(["ffmpeg", "-version"], capture_output=True, text=True)
     ffmpeg_version = result.stdout.split("\n")[0] if result.stdout else "unknown"
@@ -81,6 +96,165 @@ try:
 except FileNotFoundError:
     print("[server] ERROR: ffmpeg not found!")
     sys.exit(1)
+
+try:
+    _enc = subprocess.run(
+        ["ffmpeg", "-hide_banner", "-encoders"],
+        capture_output=True,
+        text=True,
+        timeout=15,
+    )
+    _enc_out = (_enc.stdout or "") + (_enc.stderr or "")
+except (subprocess.TimeoutExpired, OSError):
+    _enc_out = ""
+
+if "libx264" in _enc_out:
+    CLIP_EXACT_REENCODE_ARGS = ["-c:v", "libx264", "-preset", "veryfast", "-crf", "18"]
+    print("[server] /clip (exact): libx264 re-encode, yuv420p, -an, +faststart")
+else:
+    CLIP_EXACT_REENCODE_ARGS = None
+    print(
+        "[server] /clip (exact): stream copy (-c:v copy, -an); no libx264. "
+        "Cuts follow keyframes; install ffmpeg with libx264 for frame-accurate re-encode."
+    )
+
+
+def _track_job_folder_label(job_id: str) -> str:
+    """Folder path relative to PROJECTS_DIR when possible (for docs / catalog)."""
+    try:
+        rel = os.path.relpath(os.path.join(TRACK_DIR, job_id), PROJECTS_DIR)
+        if rel.startswith(".."):
+            return job_id
+        return rel.replace("\\", "/")
+    except ValueError:
+        return job_id
+
+
+def _catalog_entry_from_manifest(job_id: str, m: dict) -> dict:
+    rel = (m.get("source_video_relpath") or "").replace("\\", "/")
+    return {
+        "job_id": m.get("job_id", job_id),
+        "source_video_relpath": rel,
+        "source_video_basename": m.get("source_video_basename")
+        or (os.path.basename(rel) if rel else ""),
+        "clip_start_sec": m.get("clip_start_sec"),
+        "clip_end_sec": m.get("clip_end_sec"),
+        "n_frames": m.get("n_frames"),
+        "vid_fps": m.get("vid_fps"),
+        "created_at": m.get("created_at", ""),
+        "job_folder": _track_job_folder_label(job_id),
+        "urls": {
+            "manifest": f"/track_result/{job_id}/manifest",
+            "overlay_mp4": f"/track_result/{job_id}/overlay.mp4",
+        },
+    }
+
+
+def _merge_project_track_ref(
+    existing: Optional[dict],
+    job_id: str,
+    manifest: dict,
+    n_saved: int,
+) -> dict:
+    """Build one entry for project.json track_refs[job_id] (manifest + export history)."""
+    base = dict(_catalog_entry_from_manifest(job_id, manifest))
+    now = datetime.now().isoformat()
+    exports = list((existing or {}).get("exports") or [])
+    exports.append({"n_saved": n_saved, "timestamp": now})
+    first = (existing or {}).get("first_linked_at") or now
+    base["first_linked_at"] = first
+    base["last_export_at"] = now
+    base["exports"] = exports
+    return base
+
+
+def _build_tracks_catalog_doc(entries: list) -> dict:
+    by_video: dict = {}
+    for e in entries:
+        if not isinstance(e, dict):
+            continue
+        k = e.get("source_video_relpath") or "__unknown_source__"
+        by_video.setdefault(k, []).append({
+            "job_id": e["job_id"],
+            "clip_start_sec": e.get("clip_start_sec"),
+            "clip_end_sec": e.get("clip_end_sec"),
+            "created_at": e.get("created_at", ""),
+            "n_frames": e.get("n_frames"),
+        })
+    for refs in by_video.values():
+        refs.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    entries_sorted = sorted(
+        [e for e in entries if isinstance(e, dict)],
+        key=lambda x: x.get("created_at") or "",
+        reverse=True,
+    )
+    return {
+        "schema": "sam2_tracks_catalog.v1",
+        "updated_at": datetime.now().isoformat(),
+        "projects_dir": PROJECTS_DIR,
+        "video_dir": VIDEO_DIR,
+        "track_jobs_dir": TRACK_DIR,
+        "catalog_file": TRACK_CATALOG_PATH,
+        "tracks_by_video": by_video,
+        "tracks": entries_sorted,
+    }
+
+
+def _atomic_write_json(path: str, obj):
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(obj, f, indent=2)
+    os.replace(tmp, path)
+
+
+def rebuild_track_catalog():
+    """Scan TRACK_DIR and rewrite projects/tracks_catalog.json (video → clip refs)."""
+    entries = []
+    if os.path.isdir(TRACK_DIR):
+        for job_id in os.listdir(TRACK_DIR):
+            mj = os.path.join(TRACK_DIR, job_id, "manifest.json")
+            if not os.path.isfile(mj):
+                continue
+            try:
+                with open(mj, encoding="utf-8") as f:
+                    m = json.load(f)
+            except (OSError, json.JSONDecodeError):
+                continue
+            entries.append(_catalog_entry_from_manifest(job_id, m))
+    doc = _build_tracks_catalog_doc(entries)
+    _atomic_write_json(TRACK_CATALOG_PATH, doc)
+
+
+def upsert_track_catalog_job(job_id: str):
+    """Merge one job into tracks_catalog.json after a new track completes."""
+    mj = os.path.join(TRACK_DIR, job_id, "manifest.json")
+    if not os.path.isfile(mj):
+        return
+    try:
+        with open(mj, encoding="utf-8") as f:
+            m = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return
+    new_entry = _catalog_entry_from_manifest(job_id, m)
+    entries = []
+    if os.path.isfile(TRACK_CATALOG_PATH):
+        try:
+            with open(TRACK_CATALOG_PATH, encoding="utf-8") as f:
+                prev = json.load(f)
+            if isinstance(prev, dict):
+                entries = prev.get("tracks") or []
+            elif isinstance(prev, list):
+                entries = prev
+        except (OSError, json.JSONDecodeError):
+            entries = []
+    by_id = {e["job_id"]: i for i, e in enumerate(entries) if isinstance(e, dict) and e.get("job_id")}
+    if job_id in by_id:
+        entries[by_id[job_id]] = new_entry
+    else:
+        entries.append(new_entry)
+    doc = _build_tracks_catalog_doc(entries)
+    _atomic_write_json(TRACK_CATALOG_PATH, doc)
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # MODEL
@@ -98,6 +272,11 @@ async def lifespan(app: FastAPI):
         args.sam2_config, args.sam2_checkpoint, device=DEVICE,
     )
     print("[startup] SAM2 loaded")
+    try:
+        rebuild_track_catalog()
+        print(f"[startup] Track catalog synced -> {TRACK_CATALOG_PATH}")
+    except OSError as e:
+        print(f"[startup] WARN: could not write track catalog: {e}")
     yield
     predictor = None
     if torch.cuda.is_available():
@@ -234,12 +413,15 @@ def stream_video(path: str = Query(...), request: Request = None):
         end = min(end, file_size - 1)
         length = end - start + 1
 
+        # Larger chunks = fewer syscalls and less proxy overhead; good for big MP4s over HTTP.
+        _chunk = 1024 * 1024
+
         def iter_range():
             with open(full, "rb") as f:
                 f.seek(start)
                 remaining = length
                 while remaining > 0:
-                    chunk = f.read(min(65536, remaining))
+                    chunk = f.read(min(_chunk, remaining))
                     if not chunk:
                         break
                     remaining -= len(chunk)
@@ -256,7 +438,12 @@ def stream_video(path: str = Query(...), request: Request = None):
             },
         )
     else:
-        return FileResponse(full, media_type=media_type)
+        # Full-file response (no Range): still advertise seeking so the player can switch to ranges.
+        return FileResponse(
+            full,
+            media_type=media_type,
+            headers={"Accept-Ranges": "bytes"},
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -285,22 +472,33 @@ def clip_video(req: ClipRequest):
     duration = req.end - req.start
 
     if req.exact:
-        cmd = [
-            "ffmpeg", "-y",
-            "-ss", f"{req.start:.3f}",
-            "-i", full,
-            "-t", f"{duration:.3f}",
-            "-map", "0:v:0",
-            "-map", "0:a:0?",
-            "-c:v", "libx264",
-            "-preset", "veryfast",
-            "-crf", "18",
-            "-pix_fmt", "yuv420p",
-            "-c:a", "aac",
-            "-b:a", "192k",
-            "-movflags", "+faststart",
-            output_path,
-        ]
+        if CLIP_EXACT_REENCODE_ARGS:
+            # Re-encode: safe for odd sizes / grayscale; frame-accurate trim.
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", f"{req.start:.3f}",
+                "-i", full,
+                "-t", f"{duration:.3f}",
+                "-map", "0:v:0",
+                "-vf", "scale=trunc(iw/2)*2:trunc(ih/2)*2,format=yuv420p",
+                *CLIP_EXACT_REENCODE_ARGS,
+                "-movflags", "+faststart",
+                "-an",
+                output_path,
+            ]
+        else:
+            # No libx264: copy compressed H.264 packets only (avoids broken conda libopenh264).
+            cmd = [
+                "ffmpeg", "-y",
+                "-ss", f"{req.start:.3f}",
+                "-i", full,
+                "-t", f"{duration:.3f}",
+                "-map", "0:v:0",
+                "-c:v", "copy",
+                "-avoid_negative_ts", "1",
+                "-an",
+                output_path,
+            ]
     else:
         src_ext = os.path.splitext(full)[1] or ".mp4"
         output_path = os.path.join(CLIP_DIR, f"clip_{clip_id}{src_ext}")
@@ -319,7 +517,9 @@ def clip_video(req: ClipRequest):
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if result.returncode != 0:
-            err = result.stderr[-1500:] if result.stderr else "unknown error"
+            stderr = result.stderr or ""
+            print(f"[clip] ffmpeg failed (exit {result.returncode})\n{stderr[-4000:]}")
+            err = stderr[-1500:] if stderr else "unknown error"
             raise HTTPException(500, detail=f"ffmpeg failed: {err}")
     except subprocess.TimeoutExpired:
         raise HTTPException(504, detail="ffmpeg timed out")
@@ -495,6 +695,9 @@ async def track(
     mask_b: int = Form(0),
     draw_box: str = Form("true"),
     sample_fps: float = Form(0),
+    source_path: str = Form(""),
+    clip_start_sec: float = Form(-1.0),
+    clip_end_sec: float = Form(-1.0),
 ):
     if predictor is None:
         raise HTTPException(503, detail="SAM2 model not loaded yet")
@@ -573,11 +776,22 @@ async def track(
             "frames": frame_manifest,
             "created_at": datetime.now().isoformat(),
         }
+        if source_path and source_path.strip():
+            sp = source_path.strip().replace("\\", "/")
+            manifest["source_video_relpath"] = sp
+            manifest["source_video_basename"] = os.path.basename(sp)
+        if clip_start_sec >= 0 and clip_end_sec > clip_start_sec:
+            manifest["clip_start_sec"] = clip_start_sec
+            manifest["clip_end_sec"] = clip_end_sec
         with open(os.path.join(track_out, "manifest.json"), "w") as f:
             json.dump(manifest, f, indent=2)
 
         shutil.copy2(output_path, os.path.join(track_out, "overlay.mp4"))
         print(f"[{job_id}] Track output saved to {track_out}")
+        try:
+            upsert_track_catalog_job(job_id)
+        except OSError as e:
+            print(f"[{job_id}] WARN: catalog update failed: {e}")
 
         return JSONResponse({
             "job_id": job_id,
@@ -611,6 +825,9 @@ async def track_brush(
     mask_b: int = Form(0),
     draw_box: str = Form("true"),
     sample_fps: float = Form(0),
+    source_path: str = Form(""),
+    clip_start_sec: float = Form(-1.0),
+    clip_end_sec: float = Form(-1.0),
 ):
     if predictor is None:
         raise HTTPException(503, detail="SAM2 model not loaded yet")
@@ -706,11 +923,22 @@ async def track_brush(
             "frames": frame_manifest,
             "created_at": datetime.now().isoformat(),
         }
+        if source_path and source_path.strip():
+            sp = source_path.strip().replace("\\", "/")
+            manifest["source_video_relpath"] = sp
+            manifest["source_video_basename"] = os.path.basename(sp)
+        if clip_start_sec >= 0 and clip_end_sec > clip_start_sec:
+            manifest["clip_start_sec"] = clip_start_sec
+            manifest["clip_end_sec"] = clip_end_sec
         with open(os.path.join(track_out, "manifest.json"), "w") as f:
             json.dump(manifest, f, indent=2)
 
         shutil.copy2(output_path, os.path.join(track_out, "overlay.mp4"))
         print(f"[{job_id}] Track output saved to {track_out}")
+        try:
+            upsert_track_catalog_job(job_id)
+        except OSError as e:
+            print(f"[{job_id}] WARN: catalog update failed: {e}")
 
         return JSONResponse({
             "job_id": job_id,
@@ -727,6 +955,57 @@ async def track_brush(
         print(f"[{job_id}] ERROR: {e}")
         import traceback; traceback.print_exc()
         raise HTTPException(500, detail=str(e))
+
+
+@app.get("/tracks_catalog")
+def get_tracks_catalog():
+    """Human- and machine-readable index: source video → clip/track job refs (see projects/tracks_catalog.json)."""
+    if not os.path.isfile(TRACK_CATALOG_PATH):
+        rebuild_track_catalog()
+    try:
+        with open(TRACK_CATALOG_PATH, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError) as e:
+        raise HTTPException(500, detail=str(e))
+
+
+@app.get("/tracks_for_video")
+def tracks_for_video(path: str = Query(default="")):
+    """List completed track jobs whose manifest links to this source video (relative path)."""
+    matches = []
+    if not path or not os.path.isdir(TRACK_DIR):
+        return {"tracks": matches}
+    want = path.strip().replace("\\", "/")
+    want_base = os.path.basename(want)
+    for job_id in os.listdir(TRACK_DIR):
+        mj = os.path.join(TRACK_DIR, job_id, "manifest.json")
+        if not os.path.isfile(mj):
+            continue
+        try:
+            with open(mj, encoding="utf-8") as f:
+                m = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            continue
+        rel = (m.get("source_video_relpath") or "").replace("\\", "/")
+        mbase = m.get("source_video_basename") or (os.path.basename(rel) if rel else "")
+        if rel:
+            path_match = rel == want or os.path.normpath(rel) == os.path.normpath(want)
+        else:
+            # Older manifests without relpath: match by filename only (can collide if names repeat)
+            path_match = bool(mbase and want_base and mbase == want_base)
+        if not path_match:
+            continue
+        cs = m.get("clip_start_sec")
+        ce = m.get("clip_end_sec")
+        matches.append({
+            "job_id": m.get("job_id", job_id),
+            "clip_start_sec": cs,
+            "clip_end_sec": ce,
+            "created_at": m.get("created_at"),
+            "n_frames": m.get("n_frames"),
+        })
+    matches.sort(key=lambda x: x.get("created_at") or "", reverse=True)
+    return {"tracks": matches}
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -859,6 +1138,8 @@ def list_projects():
     projects = []
     if os.path.isdir(PROJECTS_DIR):
         for name in sorted(os.listdir(PROJECTS_DIR)):
+            if name in PROJECT_DIR_SKIP_NAMES or name.startswith("."):
+                continue
             proj_path = os.path.join(PROJECTS_DIR, name)
             if os.path.isdir(proj_path):
                 meta_path = os.path.join(proj_path, "project.json")
@@ -868,9 +1149,12 @@ def list_projects():
                         meta = json.load(f)
                 images_dir = os.path.join(proj_path, "images")
                 n_pairs = len([f for f in os.listdir(images_dir) if f.endswith(".jpg")]) if os.path.isdir(images_dir) else 0
+                tr = meta.get("track_refs")
+                n_track_jobs = len(tr) if isinstance(tr, dict) else 0
                 projects.append({
                     "name": name,
                     "n_pairs": n_pairs,
+                    "n_track_jobs": n_track_jobs,
                     "created_at": meta.get("created_at", ""),
                     "description": meta.get("description", ""),
                 })
@@ -904,6 +1188,7 @@ def create_project(req: CreateProjectRequest):
             "description": req.description,
             "created_at": datetime.now().isoformat(),
             "output_dir": proj_path,
+            "track_refs": {},
         }
         with open(meta_path, "w") as f:
             json.dump(meta, f, indent=2)
@@ -970,8 +1255,17 @@ def save_pairs(req: SavePairsRequest):
     })
     meta["save_history"] = history
     meta["last_updated"] = datetime.now().isoformat()
-    with open(meta_path, "w") as f:
-        json.dump(meta, f, indent=2)
+
+    track_refs = meta.get("track_refs")
+    if not isinstance(track_refs, dict):
+        track_refs = {}
+    prev_ref = track_refs.get(req.job_id)
+    if not isinstance(prev_ref, dict):
+        prev_ref = None
+    track_refs[req.job_id] = _merge_project_track_ref(prev_ref, req.job_id, manifest, saved)
+    meta["track_refs"] = track_refs
+
+    _atomic_write_json(meta_path, meta)
 
     n_total = len([f for f in os.listdir(images_dir) if f.endswith(".jpg")])
 
@@ -983,6 +1277,17 @@ def project_contents(project_name: str):
     proj_path = os.path.join(PROJECTS_DIR, project_name)
     if not os.path.isdir(proj_path):
         raise HTTPException(404, detail="Project not found")
+
+    meta_path = os.path.join(proj_path, "project.json")
+    meta = {}
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, encoding="utf-8") as f:
+                meta = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            meta = {}
+    tr = meta.get("track_refs")
+    track_refs = tr if isinstance(tr, dict) else {}
 
     images_dir = os.path.join(proj_path, "images")
     masks_dir = os.path.join(proj_path, "masks")
@@ -999,7 +1304,12 @@ def project_contents(project_name: str):
                     "mask": f"{base}.png" if mask_exists else None,
                 })
 
-    return {"project": project_name, "pairs": pairs, "count": len(pairs)}
+    return {
+        "project": project_name,
+        "pairs": pairs,
+        "count": len(pairs),
+        "track_refs": track_refs,
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
