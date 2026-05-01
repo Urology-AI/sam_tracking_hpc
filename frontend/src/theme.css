@@ -326,6 +326,11 @@ a:hover { text-decoration: underline; }
 .track-col-inner::-webkit-scrollbar { width: 4px; }
 .track-col-inner::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
 
+.track-col-inner .file-browser {
+  flex: 1;
+  min-height: 120px;
+}
+
 /* ── File browser ─────────────────────────────────────────────────────── */
 .file-browser {
   flex: 1;
@@ -480,6 +485,32 @@ a:hover { text-decoration: underline; }
   min-height: 0;
 }
 
+.video-load-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 24;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  background: rgba(8, 11, 15, 0.72);
+  pointer-events: none;
+}
+
+.video-load-overlay .video-load-label {
+  font-size: 12px;
+  color: var(--text-dim);
+  max-width: 90%;
+  text-align: center;
+  word-break: break-all;
+}
+
+.video-load-overlay .video-load-title {
+  font-size: 13px;
+  color: var(--text);
+}
+
 .video-stage {
   position: relative;
   width: 100%;
@@ -518,6 +549,24 @@ a:hover { text-decoration: underline; }
   user-select: none;
 }
 
+.scrubber-track-saved {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  background: rgba(45, 223, 176, 0.18);
+  border-left: 2px solid rgba(45, 223, 176, 0.55);
+  border-right: 2px solid rgba(45, 223, 176, 0.55);
+  pointer-events: none;
+  z-index: 1;
+  box-sizing: border-box;
+}
+
+.scrubber-track-saved-active {
+  background: rgba(45, 223, 176, 0.28);
+  border-left-color: var(--accent2);
+  border-right-color: var(--accent2);
+}
+
 .scrubber-range {
   position: absolute;
   top: 0;
@@ -526,6 +575,7 @@ a:hover { text-decoration: underline; }
   border-left: 2px solid var(--accent);
   border-right: 2px solid var(--accent);
   pointer-events: none;
+  z-index: 2;
 }
 
 .scrubber-playhead {
@@ -537,7 +587,7 @@ a:hover { text-decoration: underline; }
   border-radius: 2px;
   transform: translateX(-50%);
   cursor: grab;
-  z-index: 2;
+  z-index: 4;
 }
 
 .scrubber-handle {
@@ -549,7 +599,7 @@ a:hover { text-decoration: underline; }
   background: var(--accent);
   border-radius: 3px;
   cursor: ew-resize;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -566,6 +616,163 @@ a:hover { text-decoration: underline; }
   font-size: 10px;
   color: var(--text-dim);
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Stage bottom: playback + scrubber ───────────────────────────────── */
+.stage-bottom-stack {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border-top: 1px solid var(--border);
+}
+
+.video-transport-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 10px 12px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.video-transport-bar .playback-controls {
+  flex: 1;
+  min-width: 0;
+}
+
+.video-transport-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.video-transport-time {
+  flex-shrink: 0;
+}
+
+.video-transport-capture {
+  white-space: nowrap;
+  font-size: 11px;
+  padding: 5px 12px;
+}
+
+.stage-bottom-stack .scrubber-container {
+  border-top: none;
+}
+
+.track-col-inner .clip-tracks-list {
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+}
+
+.clip-tracks-list {
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--surface);
+  max-height: 220px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.clip-tracks-list.clip-tracks-empty {
+  max-height: none;
+}
+
+.clip-tracks-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-dim);
+  margin-bottom: 6px;
+}
+
+.clip-tracks-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+.clip-tracks-scroll {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-height: 0;
+}
+
+.clip-tracks-scroll::-webkit-scrollbar {
+  width: 4px;
+}
+
+.clip-tracks-scroll::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 2px;
+}
+
+.clip-track-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--r);
+  background: var(--bg2);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--mono);
+  font-size: 11px;
+  transition: background 0.1s, border-color 0.1s;
+}
+
+.clip-track-row:hover {
+  background: var(--surface2);
+  border-color: var(--border2);
+}
+
+.clip-track-row-active {
+  border-color: var(--accent2);
+  background: rgba(45, 223, 176, 0.08);
+}
+
+.clip-track-row-pending {
+  border-style: dashed;
+  border-color: var(--accent);
+  background: rgba(79, 172, 222, 0.06);
+}
+
+.clip-track-badge {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--accent);
+  border: 1px solid var(--border);
+}
+
+.clip-track-badge.job {
+  color: var(--accent2);
+}
+
+.clip-track-range {
+  font-variant-numeric: tabular-nums;
+  color: var(--text);
+}
+
+.clip-track-meta {
+  flex: 1;
+  min-width: 120px;
+  color: var(--text-dim);
+  font-size: 10px;
 }
 
 /* ── Inference panel ──────────────────────────────────────────────────── */

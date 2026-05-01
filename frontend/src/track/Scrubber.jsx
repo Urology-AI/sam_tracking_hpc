@@ -10,12 +10,16 @@ function fmt(secs) {
 export default function Scrubber({
   videoRef,
   duration,
+  /** When set, saved-track bands use this as the timeline length (e.g. full source) while playhead still uses `duration`. */
+  trackRangeDuration,
   currentTime,
   cIn,
   cOut,
   onSetIn,
   onSetOut,
   onSeek,
+  savedTrackRanges = [],
+  activeJobId = null,
 }) {
   const trackRef   = useRef(null);
   const dragState  = useRef(null); // { type: 'play' | 'in' | 'out' }
@@ -85,6 +89,11 @@ export default function Scrubber({
   const inFrac   = cIn  !== null ? timeToFrac(cIn)  : null;
   const outFrac  = cOut !== null ? timeToFrac(cOut) : null;
 
+  const rangeScale =
+    trackRangeDuration != null && trackRangeDuration > 0
+      ? trackRangeDuration
+      : duration;
+
   return (
     <div className="scrubber-container">
       <div
@@ -92,6 +101,26 @@ export default function Scrubber({
         ref={trackRef}
         onMouseDown={handleTrackMouseDown}
       >
+        {/* Saved tracks from manifest.json (per source video) */}
+        {savedTrackRanges.map((seg) => {
+          if (seg.start == null || seg.end == null || !rangeScale) return null;
+          const a = Math.max(0, Math.min(1, seg.start / rangeScale));
+          const b = Math.max(0, Math.min(1, seg.end / rangeScale));
+          if (b <= a) return null;
+          const isActive = activeJobId && seg.jobId === activeJobId;
+          return (
+            <div
+              key={seg.jobId || `${seg.start}-${seg.end}`}
+              className={`scrubber-track-saved ${isActive ? 'scrubber-track-saved-active' : ''}`}
+              style={{
+                left: `${a * 100}%`,
+                width: `${(b - a) * 100}%`,
+              }}
+              title={`Tracked: ${fmt(seg.start)}–${fmt(seg.end)}${seg.jobId ? ` (${seg.jobId})` : ''}`}
+            />
+          );
+        })}
+
         {/* In/Out range highlight */}
         {inFrac !== null && outFrac !== null && (
           <div

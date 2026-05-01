@@ -15,14 +15,29 @@ VENV="${1:-$HOME/sam2_env}"
 SAM2_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "=== Loading modules ==="
-module load cuda/12.1.1
-module load python/3.10.17
-module load ffmpeg/8.0.1
+if command -v module >/dev/null 2>&1; then
+    module load cuda/12.1.1
+    module load python/3.10.17
+    module load ffmpeg/8.0.1
+else
+    echo "No 'module' command (Environment Modules / Lmod not in this shell) — skipping cluster loads."
+    echo "Using system Python; install ffmpeg if you need SAM2/ffmpeg features."
+fi
+
+# Interpreter used only to create the venv (after activate, use venv's python)
+if command -v python >/dev/null 2>&1; then
+    PY=python
+elif command -v python3 >/dev/null 2>&1; then
+    PY=python3
+else
+    echo "Error: need python or python3 in PATH to create the venv." >&2
+    exit 1
+fi
 
 # Create venv if it doesn't exist yet
 if [ ! -d "$VENV" ]; then
     echo "=== Creating venv at $VENV ==="
-    python -m venv "$VENV"
+    "$PY" -m venv "$VENV"
 fi
 
 source "$VENV/bin/activate"
