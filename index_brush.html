@@ -1,0 +1,1368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SAM2 TRACKER + CURATOR</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Syne:wght@700;800&display=swap');
+  :root {
+    --bg:#080b0f;--bg2:#0d1117;--surface:#111820;--surface2:#161e28;
+    --border:#1e2d3d;--border2:#2a3a4d;
+    --text:#cdd9e5;--text-dim:#5c7385;
+    --accent:#4facde;--accent2:#2ddfb0;--warn:#e6a817;--danger:#e05c5c;--green:#2ddfb0;
+    --mono:'JetBrains Mono',monospace;--display:'Syne',sans-serif;--r:4px;
+  }
+  *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+  body{background:var(--bg);color:var(--text);font-family:var(--mono);font-size:12px;height:100vh;overflow:hidden;display:flex;flex-direction:column;letter-spacing:.02em}
+  .topbar{height:44px;display:flex;align-items:center;background:var(--bg2);border-bottom:1px solid var(--border);flex-shrink:0}
+  .topbar-logo{padding:0 20px;font-family:var(--display);font-size:17px;font-weight:800;color:var(--accent);letter-spacing:3px;text-transform:uppercase;border-right:1px solid var(--border);height:100%;display:flex;align-items:center;white-space:nowrap}
+  .topbar-logo span{color:var(--accent2)}
+  .topbar-tabs{display:flex;height:100%}
+  .topbar-tab{padding:0 22px;height:100%;display:flex;align-items:center;font-family:var(--display);font-size:12px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--text-dim);cursor:pointer;border-right:1px solid var(--border);transition:all .15s;position:relative}
+  .topbar-tab:hover{color:var(--text);background:rgba(79,172,222,.04)}
+  .topbar-tab.active{color:var(--accent)}
+  .topbar-tab.active::after{content:'';position:absolute;bottom:0;left:0;right:0;height:2px;background:var(--accent)}
+  .topbar-status{margin-left:auto;display:flex;align-items:center;gap:16px;padding:0 20px;font-size:11px;color:var(--text-dim)}
+  .sdot{width:6px;height:6px;border-radius:50%;display:inline-block;margin-right:5px}
+  .dot-ok{background:var(--green);box-shadow:0 0 6px var(--green)}.dot-err{background:var(--danger);box-shadow:0 0 6px var(--danger)}.dot-idle{background:var(--text-dim)}
+  .page{display:none;flex:1;min-height:0;overflow:hidden}.page.active{display:flex}
+  .track-page{flex-direction:row}.curate-page{flex-direction:column}
+  .pl{width:300px;flex-shrink:0;background:var(--bg2);overflow-y:auto;border-right:1px solid var(--border)}
+  .pc{flex:1;display:flex;flex-direction:column;overflow:hidden;background:#020406;min-width:0}
+  .pr{width:260px;flex-shrink:0;background:var(--bg2);overflow-y:auto;border-left:1px solid var(--border)}
+  .sec{border-bottom:1px solid var(--border);padding:14px 16px}
+  .st{font-size:10px;text-transform:uppercase;letter-spacing:2px;color:var(--text-dim);margin-bottom:12px;display:flex;align-items:center;gap:8px}
+  .st::after{content:'';flex:1;height:1px;background:var(--border)}
+  label{display:block;font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:5px}
+  input[type="text"],input[type="number"],select{width:100%;padding:7px 9px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:var(--r);font-family:var(--mono);font-size:12px;margin-bottom:10px;transition:border-color .15s}
+  input:focus,select:focus{outline:none;border-color:var(--accent)}
+  input[type="range"]{width:100%;accent-color:var(--accent);margin-bottom:4px}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:8px 12px;border:1px solid var(--border);border-radius:var(--r);background:var(--surface2);color:var(--text);font-family:var(--mono);font-size:11px;cursor:pointer;transition:all .12s;letter-spacing:.5px;white-space:nowrap;width:100%;margin-bottom:6px}
+  .btn:hover{border-color:var(--accent);color:var(--accent)}.btn:active{transform:scale(.97)}.btn:disabled{opacity:.35;cursor:not-allowed;pointer-events:none}
+  .ba{background:var(--accent);border-color:var(--accent);color:#050d14;font-weight:700}.ba:hover{background:#6dc4ea;border-color:#6dc4ea;color:#050d14}
+  .bg{background:var(--green);border-color:var(--green);color:#050d14;font-weight:700}.bg:hover{background:#50f0c0;border-color:#50f0c0;color:#050d14}
+  .bd{border-color:var(--danger);color:var(--danger)}.bd:hover{background:var(--danger);color:#fff}
+  .bsm{padding:5px 9px;font-size:11px;width:auto;margin-bottom:0}
+  .brow{display:flex;gap:6px}.brow .btn{flex:1;margin-bottom:0}
+  .fb{max-height:280px;overflow-y:auto;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);margin-bottom:10px}
+  .fbi{padding:6px 10px;display:flex;align-items:center;gap:8px;cursor:pointer;font-size:11px;border-bottom:1px solid var(--border);transition:background .1s}
+  .fbi:last-child{border-bottom:none}.fbi:hover{background:var(--surface2)}.fbi.active{background:rgba(79,172,222,.1)}
+  .fic{font-size:14px;opacity:.6;flex-shrink:0;width:20px;text-align:center}.fn{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.fsz{color:var(--text-dim);font-size:10px;flex-shrink:0}
+  .fp{font-size:10px;color:var(--text-dim);margin-bottom:6px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ch{padding:8px 14px;background:var(--surface);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;font-size:11px;color:var(--text-dim);flex-shrink:0;flex-wrap:wrap}
+  .ch .chl{color:var(--accent);font-weight:600}
+  .cmr{display:flex;gap:4px;padding:6px 14px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+  .mbtn{padding:4px 10px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);color:var(--text-dim);font-family:var(--mono);font-size:10px;cursor:pointer;text-transform:uppercase;letter-spacing:1px;transition:all .12s}
+  .mbtn:hover{border-color:var(--accent);color:var(--text)}.mbtn.active{border-color:var(--accent);background:var(--accent);color:#050d14;font-weight:700}
+  .sw{flex:1;min-height:0;position:relative;background:#000;display:flex;align-items:center;justify-content:center;overflow:hidden}
+  .sv{position:absolute;inset:0;width:100%;height:100%;display:block;background:#000;object-fit:contain;z-index:1}
+  #mc{position:absolute;inset:0;width:100%;height:100%;display:none;background:#000;z-index:10;pointer-events:auto;cursor:crosshair}
+  /* brush canvas sits above the frame canvas, below the box canvas */
+  #brushCanvas{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:11;pointer-events:none}
+  #cursorCanvas{position:absolute;inset:0;width:100%;height:100%;display:none;z-index:12;pointer-events:none}
+  .sph{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;color:var(--text-dim);font-size:12px;text-align:center;padding:20px;pointer-events:none;z-index:2}
+  .sph .bi{font-size:48px;opacity:.15;margin-bottom:8px}
+  .tlb{background:var(--surface);border-top:1px solid var(--border);padding:10px 16px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+  .tlc{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .tlt{font-size:11px;color:var(--accent);min-width:60px;font-weight:600}.tld{color:var(--text-dim)}
+  .cbadge{padding:2px 7px;background:var(--surface2);border:1px solid var(--border2);border-radius:3px;color:var(--text-dim);font-size:10px;cursor:pointer;transition:border-color .15s}
+  .cbadge.set{border-color:var(--accent2);color:var(--accent2);background:rgba(45,223,176,.08)}
+  .scrw{position:relative;height:24px;cursor:pointer}
+  .scrt{position:absolute;top:10px;left:0;right:0;height:4px;background:var(--surface2);border-radius:2px}
+  .scrc{position:absolute;top:10px;height:4px;background:rgba(45,223,176,.25);border:1px solid rgba(45,223,176,.4);border-radius:2px;pointer-events:none}
+  .scrp{position:absolute;top:10px;left:0;height:4px;background:var(--accent);border-radius:2px;pointer-events:none}
+  .scrh{position:absolute;top:4px;width:16px;height:16px;border-radius:50%;background:var(--accent);border:2px solid var(--bg2);transform:translateX(-50%);pointer-events:none;box-shadow:0 0 8px rgba(79,172,222,.5)}
+  .clph{position:absolute;top:4px;width:12px;height:16px;background:var(--accent2);border:1.5px solid var(--bg2);border-radius:3px;transform:translateX(-50%);cursor:ew-resize;z-index:2}
+  .cif-row{display:grid;grid-template-columns:1fr 18px 1fr;gap:8px;margin-bottom:10px;align-items:center}
+  .cif{background:var(--bg);border:1px solid var(--border);border-radius:var(--r);padding:6px 8px;font-size:11px;color:var(--text-dim)}
+  .cif.set{border-color:var(--accent2)}.cif-lbl{font-size:9px;text-transform:uppercase;color:var(--text-dim);display:block;letter-spacing:1px;margin-bottom:4px}
+  .cii{width:100%;margin:0;text-align:right;padding:4px 6px !important;background:transparent;border:none !important;color:var(--accent2);font-family:var(--mono);font-size:12px;font-weight:600}
+  .cii:focus{outline:none;border:none !important}.cii::placeholder{color:var(--text-dim);font-weight:400;font-size:11px}
+  .csm{font-size:10px;color:var(--text-dim);margin-top:4px;min-height:14px}.csm.ok{color:var(--green)}.csm.err{color:var(--danger)}
+  .bboxb{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);padding:6px 10px;font-size:11px;color:var(--text-dim);margin-bottom:10px;display:none}
+  .bboxb.set{display:block;border-color:var(--green);color:var(--green)}
+  .prg{background:var(--surface);border-top:1px solid var(--border);padding:10px 16px;font-size:11px;color:var(--text-dim);display:none;flex-shrink:0}
+  .pbt{width:100%;height:3px;background:var(--border);border-radius:2px;margin-top:6px;overflow:hidden}
+  .pbf{height:100%;background:linear-gradient(90deg,var(--accent),var(--accent2));border-radius:2px;width:0%;transition:width .3s;animation:ppulse 1.5s ease-in-out infinite}
+  @keyframes ppulse{0%,100%{opacity:1}50%{opacity:.6}}
+  .res{background:var(--surface);border-top:1px solid var(--border);padding:10px 16px 14px;display:none;flex-shrink:0}
+  .res video{width:100%;border-radius:var(--r);border:1px solid var(--border2);background:#000;margin-top:8px;max-height:250px}
+  .rh{display:flex;align-items:center;gap:8px;font-size:11px}.rh .ok{color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:1px}
+  .spin{display:inline-block;width:12px;height:12px;border:2px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .6s linear infinite}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(60px);padding:9px 18px;background:var(--surface2);border:1px solid var(--border2);border-radius:5px;color:var(--text);font-size:12px;z-index:9999;opacity:0;transition:all .28s cubic-bezier(.34,1.56,.64,1);pointer-events:none;font-family:var(--mono)}
+  .toast.show{transform:translateX(-50%) translateY(0);opacity:1}.toast.tok{border-color:var(--green);color:var(--green)}.toast.terr{border-color:var(--danger);color:var(--danger)}.toast.twarn{border-color:var(--warn);color:var(--warn)}
+  .kbd{display:inline-block;padding:1px 5px;background:var(--bg);border:1px solid var(--border2);border-radius:3px;font-size:10px;color:var(--text-dim)}
+  .cr{display:flex;align-items:center;gap:8px;margin-bottom:10px}.cr label{flex:0;margin-bottom:0;white-space:nowrap}
+  .cr input[type="color"]{width:36px;height:28px;padding:2px;border:1px solid var(--border);border-radius:var(--r);background:var(--bg);cursor:pointer;margin-bottom:0;flex-shrink:0}
+  .vd{text-align:right;font-size:11px;color:var(--accent);font-weight:600;margin-top:-2px;margin-bottom:8px}
+  .nr{display:flex;align-items:center;gap:8px;margin-bottom:10px}.nr label{flex:0;margin-bottom:0;white-space:nowrap}.nr input[type="number"]{width:80px;flex:0;margin-bottom:0;text-align:right}.nr .unit{color:var(--text-dim);font-size:11px;white-space:nowrap}
+  /* Curate page */
+  .ctb{padding:10px 16px;background:var(--bg2);border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px;flex-wrap:wrap;flex-shrink:0}
+  .ctb label{margin:0;font-size:11px}.ctb select{margin:0;font-size:11px;padding:5px 8px;width:auto}
+  .cbody{flex:1;display:flex;min-height:0;overflow:hidden}
+  .cgw{flex:1;overflow-y:auto;padding:12px;background:var(--bg)}
+  .csd{width:260px;flex-shrink:0;background:var(--bg2);border-left:1px solid var(--border);overflow-y:auto;padding:14px 16px}
+  .cg{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:10px}
+  .cc{background:var(--surface);border:2px solid var(--border);border-radius:6px;overflow:hidden;cursor:pointer;transition:border-color .15s,box-shadow .15s,opacity .15s;position:relative;user-select:none}
+  .cc:hover{border-color:var(--accent)}
+  .cc.included{border-color:var(--accent2);box-shadow:0 0 0 1px var(--accent2)}
+  .cc.excluded{opacity:.35;border-color:var(--danger)}
+  .cc .cthumb{position:relative;width:100%;aspect-ratio:16/9;background:var(--surface2);display:block;overflow:hidden}
+  .cc .ci{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block;z-index:1}
+  .cc .cthumb.loading::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,transparent 0%,rgba(255,255,255,.04) 50%,transparent 100%);background-size:200% 100%;animation:shimmer 1.2s infinite}
+  @keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
+  .cc .cf{padding:5px 8px;font-size:10px;color:var(--text-dim);display:flex;align-items:center;gap:6px;background:var(--surface)}.cc .cf .cidx{color:var(--accent);font-weight:600}
+  .cc .ck{position:absolute;top:6px;right:6px;width:22px;height:22px;border-radius:50%;border:2px solid rgba(255,255,255,.4);background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;font-size:12px;z-index:10;transition:all .12s;pointer-events:none}
+  .cc.included .ck{background:var(--accent2);border-color:var(--accent2);color:#000}
+  .cc.excluded .ck{background:var(--danger);border-color:var(--danger);color:#fff}
+  .pvbtn{position:absolute;top:6px;left:6px;width:26px;height:22px;border:1px solid rgba(255,255,255,.35);border-radius:4px;background:rgba(0,0,0,.6);color:#fff;font-family:var(--mono);font-size:11px;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:11;transition:border-color .12s}
+  .pvbtn:hover{border-color:var(--accent);color:var(--accent)}
+  .pvm{display:none;position:fixed;inset:0;z-index:900;background:rgba(0,0,0,.88);align-items:center;justify-content:center;flex-direction:column;gap:12px;cursor:zoom-out}
+  .pvm.show{display:flex}
+  .pvm canvas{max-width:90vw;max-height:80vh;border-radius:4px;border:1px solid var(--border2);cursor:default}
+  .pvh{position:fixed;top:18px;left:18px;right:18px;display:flex;align-items:center;gap:10px;z-index:901;cursor:default}
+  .pvh .pvi{margin-left:auto;background:rgba(0,0,0,.55);padding:6px 10px;border:1px solid var(--border2);border-radius:4px;color:var(--text-dim);font-size:12px}
+  .stat{display:inline-flex;align-items:center;gap:4px;padding:3px 8px;background:var(--surface2);border:1px solid var(--border);border-radius:4px;font-size:10px;color:var(--text-dim)}
+  .stat .sv2{color:var(--accent);font-weight:600}
+  .tip{font-size:10px;color:var(--text-dim);line-height:1.8;margin-top:16px}
+  .tip .st{margin-bottom:8px}
+  /* brush mode indicator */
+  .brush-active{border-color:var(--warn) !important;color:var(--warn) !important}
+</style>
+</head>
+<body>
+<div class="toast" id="T"></div>
+
+<!-- PREVIEW MODAL -->
+<div class="pvm" id="pvModal" onclick="closePvModal(event)">
+  <div class="pvh" onclick="event.stopPropagation()">
+    <button class="btn bsm" type="button" onclick="closePvModal()">&#8592; Close Preview</button>
+    <div class="pvi" id="pvInfo"></div>
+  </div>
+  <canvas id="pvCan" onclick="event.stopPropagation()"></canvas>
+</div>
+
+<!-- TOP BAR -->
+<div class="topbar">
+  <div class="topbar-logo">SAM<span>2</span> TRACKER</div>
+  <div class="topbar-tabs">
+    <div class="topbar-tab active" id="tabTrack" onclick="gotoPage('track')">&#11041; Track</div>
+    <div class="topbar-tab" id="tabCurate" onclick="gotoPage('curate')">&#8862; Curate</div>
+  </div>
+  <div class="topbar-status">
+    <span><span class="sdot dot-idle" id="dot"></span>SAM2</span>
+    <span id="projBadge" style="color:var(--accent2)">No project</span>
+  </div>
+</div>
+
+<!-- PAGE: TRACK -->
+<div class="page active track-page" id="pageTrack">
+  <!-- LEFT PANEL -->
+  <div class="pl">
+    <div class="sec">
+      <div class="st">Video Browser</div>
+      <div class="fp" id="fbPath">Connecting...</div>
+      <div class="fb" id="fb"><div style="padding:12px;color:var(--text-dim);font-size:11px">Waiting for server...</div></div>
+      <div id="vname" style="font-size:11px;color:var(--accent2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:none;margin-top:4px"></div>
+    </div>
+    <div class="sec">
+      <div class="st">Playback</div>
+      <div class="brow" style="margin-bottom:10px">
+        <button class="btn bsm" onclick="seek(-5)">&#9666; 5s</button>
+        <button class="btn bsm" onclick="tplay()" id="bPlay">&#9654; Play</button>
+        <button class="btn bsm" onclick="seek(5)">5s &#9656;</button>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:4px">
+          <label style="margin:0">Skip</label>
+          <input type="number" id="skipAmt" value="1" min="0.1" step="0.1" style="width:50px;margin:0;padding:4px 5px;font-size:11px"/>
+          <span style="font-size:10px;color:var(--text-dim)">s</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:4px">
+          <label style="margin:0">Speed</label>
+          <select id="spd" onchange="vid.playbackRate=parseFloat(this.value)||1" style="width:70px;margin:0;padding:4px 5px;font-size:11px">
+            <option value="0.1">0.1x</option><option value="0.25">0.25x</option><option value="0.5">0.5x</option>
+            <option value="1" selected>1x</option><option value="1.5">1.5x</option><option value="2">2x</option>
+          </select>
+        </div>
+      </div>
+      <div class="st">Clip Range</div>
+      <div class="cif-row">
+        <div class="cif" id="cifIn"><span class="cif-lbl">In (seconds) - or press I</span><input class="cii" type="number" id="inInp" min="0" step="0.01" placeholder="0.00"/></div>
+        <div style="color:var(--text-dim);font-size:12px;text-align:center">&#8594;</div>
+        <div class="cif" id="cifOut"><span class="cif-lbl">Out (seconds) - or press O</span><input class="cii" type="number" id="outInp" min="0" step="0.01" placeholder="end"/></div>
+      </div>
+      <div class="brow" style="margin-bottom:8px">
+        <button class="btn bsm" id="bIn" onclick="setIn()" disabled>[ In</button>
+        <button class="btn bsm" id="bOut" onclick="setOut()" disabled>Out ]</button>
+        <button class="btn bsm" id="bIn0" onclick="setIn0()" disabled title="Set In = 0.00s">In=0</button>
+        <button class="btn bsm" id="bClr" onclick="clrClip()" disabled>&#10005;</button>
+      </div>
+      <div id="clipDur" style="font-size:10px;color:var(--text-dim);margin-bottom:8px;display:none"></div>
+      <button class="btn ba" id="bXtr" onclick="extract()" disabled>&#9986; Extract Clip</button>
+      <div class="csm" id="xtrMsg"></div>
+    </div>
+    <div class="sec" style="padding-bottom:12px">
+      <div class="st">Shortcuts</div>
+      <div style="display:flex;flex-direction:column;gap:4px;font-size:11px;color:var(--text-dim)">
+        <div><span class="kbd">Space</span> Play/Pause &nbsp; <span class="kbd">&#8592;</span><span class="kbd">&#8594;</span> Skip</div>
+        <div><span class="kbd">I</span> Set In &nbsp; <span class="kbd">O</span> Set Out &nbsp; <span class="kbd">C</span> Capture</div>
+        <div><span class="kbd">T</span> Toggle stage &nbsp; <span class="kbd">Esc</span> Clear box/brush</div>
+        <div><span class="kbd">B</span> Brush mode &nbsp; <span class="kbd">[ ]</span> Brush size</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- CENTER PANEL -->
+  <div class="pc">
+    <div class="ch">
+      <span class="chl">STAGE</span>
+      <span id="dims" style="margin-left:4px;color:var(--text-dim)"></span>
+      <span style="margin-left:auto;display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span id="bboxInfo" style="color:var(--accent2);font-size:11px"></span>
+        <button class="btn bsm ba" onclick="showVid()" id="bVid">&#9654; Video</button>
+        <button class="btn bsm" onclick="showFrm()" id="bFrm" disabled>&#11041; Frame</button>
+        <button class="btn bsm" onclick="togStage()" id="bTog" disabled>&#8644;</button>
+        <button class="btn bsm" onclick="clrBox()" id="bClrBox" style="display:none">&#10005; Box</button>
+        <button class="btn bsm ba" onclick="capFrame()" id="bCap" disabled>Capture Frame</button>
+      </span>
+    </div>
+    <div class="cmr" id="modeBar">
+      <button class="mbtn active" id="mDraw" onclick="setMode('draw')">&#10010; Draw Box</button>
+      <button class="mbtn" id="mBrush" onclick="setMode('brush')" title="Paint a brush mask instead of a box">&#128396; Brush Mask</button>
+      <button class="mbtn" id="mErase" onclick="setMode('erase')" style="display:none">&#9675; Erase</button>
+      <button class="mbtn" id="mView" onclick="setMode('view')">&#10702; View</button>
+      <!-- brush controls, shown only in brush/erase mode -->
+      <div id="brushControls" style="display:none;align-items:center;gap:10px;margin-left:8px;flex:1">
+        <label style="margin:0;font-size:10px;color:var(--text-dim)">Size</label>
+        <input type="range" id="brushSize" min="4" max="120" value="24" style="width:80px;margin:0" oninput="document.getElementById('brushSizeVal').textContent=this.value"/>
+        <span id="brushSizeVal" style="font-size:10px;color:var(--accent);min-width:24px">24</span>
+        <label style="margin:0;font-size:10px;color:var(--text-dim)">Opacity</label>
+        <input type="range" id="brushOpacity" min="5" max="100" value="55" style="width:80px;margin:0" oninput="document.getElementById('brushOpVal').textContent=this.value+'%'"/>
+        <span id="brushOpVal" style="font-size:10px;color:var(--accent);min-width:32px">55%</span>
+        <input type="color" id="brushColor" value="#ff5f87" style="width:28px;height:22px;padding:2px;border:1px solid var(--border);border-radius:3px;background:var(--bg);cursor:pointer"/>
+        <button class="btn bsm bd" onclick="clearBrushMask()" style="margin-left:4px">&#10005; Clear</button>
+        <button class="btn bsm" onclick="undoBrush()" style="margin-left:0">&#8617; Undo</button>
+        <span id="brushPxCount" style="font-size:10px;color:var(--text-dim);margin-left:4px">0 px painted</span>
+      </div>
+    </div>
+    <div class="sw" id="ca">
+      <video id="vid" class="sv" muted playsinline controls crossorigin="anonymous"></video>
+      <canvas id="mc"></canvas>
+      <canvas id="brushCanvas"></canvas>
+      <canvas id="cursorCanvas"></canvas>
+      <div class="sph" id="sph"><div class="bi">&#11041;</div><div>Select video &#8594; set In/Out &#8594; Extract Clip<br>&#8594; seek to a frame &#8594; <strong>Capture Frame</strong> &#8594; draw box or paint brush mask</div></div>
+    </div>
+    <div class="tlb">
+      <div class="tlc">
+        <span class="tlt" id="tTime">0.00s</span>
+        <span class="tld" id="tDur">/ 0.00s</span>
+        <div style="flex:1"></div>
+        <span style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-dim)">
+          <span class="cbadge" id="badgeIn" onclick="seekIn()">IN: -</span>
+          <span>&#8594;</span>
+          <span class="cbadge" id="badgeOut" onclick="seekOut()">OUT: -</span>
+        </span>
+      </div>
+      <div class="scrw" id="scrW">
+        <div class="scrt"></div>
+        <div class="scrc" id="scrC" style="display:none"></div>
+        <div class="scrp" id="scrP" style="width:0%"></div>
+        <div class="clph" id="hIn" style="display:none;left:0%"></div>
+        <div class="clph" id="hOut" style="display:none;left:100%"></div>
+        <div class="scrh" id="scrH" style="left:0%"></div>
+      </div>
+    </div>
+    <div class="prg" id="prg">
+      <div style="display:flex;align-items:center;gap:8px"><span class="spin"></span><span id="prgMsg">Running...</span></div>
+      <div class="pbt"><div class="pbf" id="prgFill"></div></div>
+    </div>
+    <div class="res" id="resArea">
+      <div class="rh">
+        <span class="ok">&#10003; Tracked</span>
+        <span id="resInfo" style="color:var(--text-dim)"></span>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px;margin-top:10px;padding:8px 10px;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--r);flex-wrap:wrap">
+        <span style="font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text-dim);white-space:nowrap">Curate sample rate</span>
+        <select id="curateRate" style="margin:0;padding:4px 8px;font-size:11px;width:auto;flex-shrink:0" onchange="onTrackRateChange()">
+          <option value="0">All frames</option>
+          <option value="0.25">0.25 fps</option>
+          <option value="0.5">0.5 fps</option>
+          <option value="1" selected>1 fps</option>
+          <option value="2">2 fps</option>
+          <option value="5">5 fps</option>
+          <option value="10">10 fps</option>
+        </select>
+        <span id="curateRatePreview" style="font-size:11px;color:var(--accent2);flex:1;white-space:nowrap">- run tracking first</span>
+        <button class="btn bsm bg" onclick="gotoPage('curate')" style="flex-shrink:0">&#8862; Open Curate &#8594;</button>
+      </div>
+      <video id="resVid" controls loop playsinline crossorigin="anonymous" style="max-height:240px;margin-top:8px"></video>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="pr">
+    <div class="sec">
+      <div class="st">Project</div>
+      <label>Active Project</label>
+      <div style="display:flex;gap:4px;margin-bottom:6px">
+        <select id="projSel" style="flex:1;margin:0" onchange="onProjSel()"><option value="">- select -</option></select>
+        <button class="btn bsm" onclick="loadProjs()" style="flex-shrink:0">&#8634;</button>
+      </div>
+      <input type="text" id="pName" placeholder="new_project_name" style="margin-bottom:6px"/>
+      <input type="text" id="pDesc" placeholder="Description (optional)" style="font-size:10px"/>
+      <button class="btn ba" onclick="mkProj()">+ Create Project</button>
+    </div>
+    <div class="sec">
+      <div class="st">Bounding Box</div>
+      <div class="bboxb" id="bboxB">
+        (<span id="bbx1">-</span>,<span id="bby1">-</span>) &#8594; (<span id="bbx2">-</span>,<span id="bby2">-</span>)<br/>
+        <span id="bbwh" style="font-size:10px"></span>
+      </div>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:8px" id="bboxHint">Capture a frame then draw a box or paint a brush mask.</div>
+    </div>
+    <div class="sec">
+      <div class="st">Inference Config</div>
+      <div class="nr"><label>Sample FPS</label><input type="number" id="sFps" value="0" min="0" max="120" step="1"/><span class="unit">(0=all)</span></div>
+      <label>Mask Alpha</label>
+      <input type="range" id="mAlpha" min="0" max="1" step="0.05" value="0.45" oninput="document.getElementById('aVal').textContent=this.value"/>
+      <div class="vd" id="aVal">0.45</div>
+      <div class="cr">
+        <label>Mask Color</label>
+        <input type="color" id="mColor" value="#4facde"/>
+        <span style="font-size:11px;color:var(--text-dim);flex:1" id="mColorHex">#4facde</span>
+      </div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px">
+        <label style="margin:0;white-space:nowrap">Draw box outline</label>
+        <input type="checkbox" id="dBox" checked style="width:auto;margin:0"/>
+      </div>
+      <button class="btn bg" id="bRun" onclick="runSAM2()" disabled>&#9654; Run SAM2 Tracking</button>
+    </div>
+    <div class="sec" style="font-size:11px;color:var(--text-dim);line-height:1.8">
+      <div class="st">Workflow</div>
+      <ol style="padding-left:16px">
+        <li>Browse &amp; select video</li>
+        <li>Type In/Out seconds or use <span class="kbd">I</span>/<span class="kbd">O</span></li>
+        <li>Extract Clip</li>
+        <li>Seek in clip &#8594; <span class="kbd">C</span> to capture frame</li>
+        <li>Draw bounding box <em>or</em> paint brush mask</li>
+        <li>Run SAM2 Tracking</li>
+        <li>Switch to Curate to review &amp; save masks</li>
+      </ol>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: CURATE -->
+<div class="page curate-page" id="pageCurate">
+  <div class="ctb">
+    <button class="btn bsm" onclick="gotoPage('track')" style="flex-shrink:0;border-color:var(--accent);color:var(--accent)">&#8592; Track</button>
+    <span style="color:var(--border2)">|</span>
+    <span style="font-family:var(--display);font-weight:700;color:var(--accent);letter-spacing:1px;font-size:13px">CURATE</span>
+    <span style="color:var(--border2)">|</span>
+    <label>Job:</label>
+    <span id="cJob" style="color:var(--accent2);font-weight:600;font-size:11px">-</span>
+    <span style="color:var(--border2)">|</span>
+    <label>Sample rate:</label>
+    <select id="cRate" onchange="onCurateRateChange(); applyRate()">
+      <option value="0">All frames</option>
+      <option value="0.25">0.25 fps</option><option value="0.5">0.5 fps</option>
+      <option value="1">1 fps</option><option value="2">2 fps</option>
+      <option value="5">5 fps</option><option value="10">10 fps</option>
+      <option value="custom">Custom...</option>
+    </select>
+    <input type="number" id="cRateCustom" min="0.01" max="120" step="0.01" placeholder="fps"
+      style="display:none;width:68px;margin:0;padding:4px 6px;font-size:11px"
+      oninput="applyRate()"/>
+    <span class="stat"><span class="sv2" id="cShown">0</span>&nbsp;shown / <span class="sv2" id="cTotal">0</span>&nbsp;total</span>
+    <span style="color:var(--border2)">|</span>
+    <label>View:</label>
+    <select id="cView" onchange="renderGrid()">
+      <option value="frame">Frame</option>
+      <option value="mask">Mask</option>
+      <option value="overlay" selected>Overlay</option>
+    </select>
+    <div style="flex:1"></div>
+    <button class="btn bsm" onclick="selAll()">&#9745; Select All</button>
+    <button class="btn bsm" onclick="deselAll()">&#9744; Deselect All</button>
+    <button class="btn bsm bd" onclick="exclSelected()">&#10005; Exclude Selected</button>
+    <button class="btn bsm" onclick="restAll()">&#8634; Restore All</button>
+    <button class="btn bsm bg" id="bSaveTopSel" onclick="savePairs('selected')">&#128190; Save Selected</button>
+    <button class="btn bsm ba" id="bSaveTopAll" onclick="savePairs('all')">&#128190; Save All Shown</button>
+  </div>
+  <div class="cbody">
+    <div class="cgw">
+      <div class="cg" id="cGrid"></div>
+      <div id="cEmpty" style="display:none;text-align:center;padding:60px;color:var(--text-dim)">
+        Run SAM2 tracking first, then return here to curate frames.
+      </div>
+    </div>
+    <div class="csd">
+      <div class="st">Save to Project</div>
+      <label>Project</label>
+      <select id="cProj" style="margin-bottom:10px"><option value="">- select -</option></select>
+      <label>Filename Prefix</label>
+      <input type="text" id="cPfx" placeholder="e.g. run01_clip_a" style="margin-bottom:10px"/>
+      <div style="font-size:11px;color:var(--text-dim);margin-bottom:14px;line-height:2">
+        <div>Shown: <span style="color:var(--accent);font-weight:600" id="cCntShown">0</span></div>
+        <div>Included: <span style="color:var(--accent2);font-weight:600" id="cCntIncl">0</span></div>
+        <div>Excluded: <span style="color:var(--danger);font-weight:600" id="cCntExcl">0</span></div>
+      </div>
+      <button class="btn bg" id="bSaveSel" onclick="savePairs('selected')">&#128190; Save Included Frames</button>
+      <button class="btn ba" id="bSaveAll" onclick="savePairs('all')">&#128190; Save All Shown</button>
+      <div id="saveMsg" style="font-size:10px;color:var(--text-dim);margin-top:8px;line-height:1.6"></div>
+      <div class="tip">
+        <div class="st">How to use</div>
+        <div><strong>Click card</strong> &#8594; toggle include / exclude</div>
+        <div><strong>&#9974; button</strong> &#8594; full-size preview</div>
+        <div><strong>Select All</strong> &#8594; include all shown</div>
+        <div><strong>Deselect All</strong> &#8594; exclude all shown</div>
+        <div><strong>Save Included</strong> &#8594; only green-checked cards</div>
+        <div><strong>Save All Shown</strong> &#8594; every card in current view</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── globals ────────────────────────────────────────────────────────────────
+const BASE = window.location.origin;
+const vid  = document.getElementById('vid');
+const cnv  = document.getElementById('mc');
+const ctx  = cnv.getContext('2d');
+const brushCnv = document.getElementById('brushCanvas');
+const brushCtx = brushCnv.getContext('2d', {willReadFrequently: true});
+const cursorCnv = document.getElementById('cursorCanvas');
+const cursorCtx = cursorCnv.getContext('2d');
+
+let selPath = null, clipBlob = null, clipObjUrl = null, vReady = false;
+let frmCnv = null, fW = 0, fH = 0, stage = 'video';
+let iScale = 1, iOx = 0, iOy = 0, iW = 0, iH = 0;
+let bbox = null, mode = 'draw', drag = false, dS = null, dC = null;
+let cIn = null, cOut = null, scrDrag = false, hDrag = null;
+let curProj = null, curJob = null, curateMf = null;
+let currentVideoFilename = "";
+
+// brush state
+let brushPainting = false;
+let brushUndoStack = [];  // array of ImageData snapshots
+let brushHasContent = false;
+
+// curate state
+let cStates = [];
+let cShown  = [];
+
+const inInp  = document.getElementById('inInp');
+const outInp = document.getElementById('outInp');
+
+// ─── utilities ──────────────────────────────────────────────────────────────
+function toast(m, t='', d=3000){
+  const el = document.getElementById('T');
+  el.textContent = m;
+  el.className = 'toast show' + (t ? ' t'+t : '');
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.classList.remove('show'), d);
+}
+function fmt(s){ return isFinite(s) ? s.toFixed(2)+'s' : '0.00s'; }
+function fn(s) { return isFinite(s) ? s.toFixed(2) : ''; }
+
+// ─── page routing ───────────────────────────────────────────────────────────
+function gotoPage(p){
+  document.querySelectorAll('.page').forEach(x => x.classList.remove('active'));
+  document.querySelectorAll('.topbar-tab').forEach(x => x.classList.remove('active'));
+  const name = p[0].toUpperCase() + p.slice(1);
+  document.getElementById('page'+name).classList.add('active');
+  document.getElementById('tab'+name).classList.add('active');
+  if(p === 'curate'){ syncCurateProjList(); refreshCurate(); }
+}
+
+// ─── init ───────────────────────────────────────────────────────────────────
+async function init(){
+  try{
+    const r = await fetch(BASE+'/health', {signal: AbortSignal.timeout(5000)});
+    const d = await r.json();
+    document.getElementById('dot').className = 'sdot ' + (d.sam2_loaded ? 'dot-ok' : 'dot-err');
+    browseDir('');
+  } catch{
+    document.getElementById('dot').className = 'sdot dot-err';
+    document.getElementById('fb').innerHTML = '<div style="padding:12px;color:var(--danger);font-size:11px">Cannot reach server</div>';
+  }
+}
+
+// ─── file browser ───────────────────────────────────────────────────────────
+async function browseDir(path){
+  const el = document.getElementById('fb'), fp = document.getElementById('fbPath');
+  try{
+    const r = await fetch(BASE+'/browse?path='+encodeURIComponent(path));
+    if(!r.ok){ const d=await r.json(); throw new Error(d.detail||r.statusText); }
+    const d = await r.json();
+    fp.textContent = d.current ? '&#128193; '+d.current : '&#128193; (root)';
+    el.innerHTML = '';
+    if(d.parent !== null && d.parent !== undefined){
+      const e = document.createElement('div');
+      e.className = 'fbi';
+      e.innerHTML = '<span class="fic">&#11014;</span><span class="fn">..</span>';
+      e.onclick = () => browseDir(d.parent === '.' ? '' : d.parent);
+      el.appendChild(e);
+    }
+    for(const f of (d.entries||[])){
+      const e = document.createElement('div');
+      e.className = 'fbi';
+      if(f.type === 'dir'){
+        e.innerHTML = `<span class="fic">&#128193;</span><span class="fn">${f.name}</span>`;
+        e.onclick = () => browseDir(f.path);
+      } else {
+        e.innerHTML = `<span class="fic">&#127916;</span><span class="fn">${f.name}</span><span class="fsz">${f.size_mb} MB</span>`;
+        e.onclick = () => selVid(f.path, f.name, e);
+      }
+      el.appendChild(e);
+    }
+    if(!(d.entries||[]).length)
+      el.innerHTML = '<div style="padding:12px;color:var(--text-dim);text-align:center;font-size:11px">No videos found</div>';
+  } catch(e){
+    fp.textContent = 'Error';
+    el.innerHTML = `<div style="padding:12px;color:var(--danger);font-size:11px">${e.message}</div>`;
+  }
+}
+
+// ─── video selection ────────────────────────────────────────────────────────
+function resetFrame(){ frmCnv=null; fW=0; fH=0; bbox=null; updBbox(); updStageBtns(); resetBrushState(); }
+function selVid(path, name, el=null){
+  selPath = path;
+  currentVideoFilename = name.replace(/\.[^/.]+$/, "");
+  clipBlob = null; vReady = false; resetFrame(); stage = 'video';
+  document.querySelectorAll('.fbi').forEach(x => x.classList.remove('active'));
+  if(el) el.classList.add('active');
+  document.getElementById('bCap').disabled = true;
+  document.getElementById('bIn').disabled  = true;
+  document.getElementById('bOut').disabled = true;
+  document.getElementById('bIn0').disabled = true;
+  vid.crossOrigin = 'anonymous';
+  vid.src = BASE+'/video?path='+encodeURIComponent(path);
+  vid.load();
+  document.getElementById('vname').textContent = '&#128196; '+name;
+  document.getElementById('vname').style.display = 'block';
+  document.getElementById('sph').style.display = 'none';
+  cIn = null; cOut = null; updClipUI(); showVid();
+  toast('Loading: '+name);
+}
+
+vid.addEventListener('loadedmetadata', () => {
+  vReady = true;
+  document.getElementById('tDur').textContent = '/ '+fmt(vid.duration);
+  document.getElementById('dims').textContent = vid.videoWidth+'x'+vid.videoHeight;
+  document.getElementById('bIn').disabled  = false;
+  document.getElementById('bOut').disabled = false;
+  document.getElementById('bIn0').disabled = false;
+  document.getElementById('bCap').disabled = false;
+  updScrub(); updClipUI();
+});
+vid.addEventListener('timeupdate', () => { document.getElementById('tTime').textContent = fmt(vid.currentTime); updScrub(); });
+vid.addEventListener('play',  () => document.getElementById('bPlay').textContent = '&#9646;&#9646; Pause');
+vid.addEventListener('pause', () => document.getElementById('bPlay').textContent = '&#9654; Play');
+
+function tplay(){ if(!vReady) return; vid.paused ? vid.play().catch(()=>{}) : vid.pause(); }
+function seek(d){ if(!vReady) return; vid.currentTime = Math.max(0, Math.min(vid.duration, vid.currentTime+d)); }
+
+// ─── scrubber ───────────────────────────────────────────────────────────────
+function updScrub(){
+  if(!vReady || !vid.duration) return;
+  const p = vid.currentTime / vid.duration * 100;
+  document.getElementById('scrP').style.width  = p+'%';
+  document.getElementById('scrH').style.left   = p+'%';
+  updClipRgn();
+}
+function updClipRgn(){
+  const dur=vid.duration, ci=document.getElementById('scrC'),
+        hi=document.getElementById('hIn'), ho=document.getElementById('hOut');
+  if(!dur){ ci.style.display='none'; hi.style.display='none'; ho.style.display='none'; return; }
+  if(cIn!==null && cOut!==null){
+    const l=cIn/dur*100, r=cOut/dur*100;
+    ci.style.left=l+'%'; ci.style.width=(r-l)+'%'; ci.style.display='block';
+    hi.style.left=l+'%'; hi.style.display='block';
+    ho.style.left=r+'%'; ho.style.display='block';
+  } else if(cIn!==null){
+    hi.style.left=(cIn/dur*100)+'%'; hi.style.display='block';
+    ci.style.display='none'; ho.style.display='none';
+  } else {
+    ci.style.display='none'; hi.style.display='none'; ho.style.display='none';
+  }
+}
+const SW = document.getElementById('scrW');
+SW.addEventListener('mousedown', e => {
+  if(!vReady) return;
+  const r=SW.getBoundingClientRect(), cx=e.clientX-r.left;
+  const hi=document.getElementById('hIn'), ho=document.getElementById('hOut');
+  const hix=parseFloat(hi.style.left||'0')/100*r.width;
+  const hox=parseFloat(ho.style.left||'0')/100*r.width;
+  if(hi.style.display!=='none' && Math.abs(cx-hix)<10){ hDrag='in'; return; }
+  if(ho.style.display!=='none' && Math.abs(cx-hox)<10){ hDrag='out'; return; }
+  scrDrag=true; scrSeek(e.clientX);
+});
+document.addEventListener('mousemove', e => {
+  if(scrDrag) scrSeek(e.clientX);
+  if(hDrag){
+    const r=SW.getBoundingClientRect(), pct=Math.max(0,Math.min(1,(e.clientX-r.left)/r.width)), t=pct*vid.duration;
+    if(hDrag==='in'){ cIn=Math.min(t,cOut??vid.duration); if(cOut!==null&&cIn>=cOut) cIn=Math.max(0,cOut-0.01); }
+    else            { cOut=Math.max(t,cIn??0);             if(cIn!==null&&cOut<=cIn)  cOut=Math.min(vid.duration,cIn+0.01); }
+    updClipUI(); updClipRgn();
+  }
+});
+document.addEventListener('mouseup', () => { scrDrag=false; hDrag=null; });
+function scrSeek(cx){ const r=SW.getBoundingClientRect(); vid.currentTime=Math.max(0,Math.min(1,(cx-r.left)/r.width))*vid.duration; }
+
+// ─── clip in/out ─────────────────────────────────────────────────────────────
+function setIn(){  if(!vReady) return; cIn=vid.currentTime; if(cOut!==null&&cIn>=cOut) cOut=null; updClipUI(); toast('In: '+fmt(cIn),'ok'); }
+function setOut(){ if(!vReady) return; if(cIn!==null&&vid.currentTime<=cIn){toast('Out must be after In ('+fmt(cIn)+')','err');return;} cOut=vid.currentTime; updClipUI(); toast('Out: '+fmt(cOut),'ok'); }
+function setIn0(){ cIn=0; if(cOut!==null&&cOut<=0) cOut=null; updClipUI(); toast('In: 0.00s','ok'); }
+function seekIn(){  if(cIn!==null&&vReady) vid.currentTime=cIn; }
+function seekOut(){ if(cOut!==null&&vReady) vid.currentTime=cOut; }
+
+function applyInputs(){
+  const ri=inInp.value.trim(), ro=outInp.value.trim();
+  let ni=ri===''?null:parseFloat(ri), no=ro===''?null:parseFloat(ro);
+  if(ni!==null&&(!isFinite(ni)||ni<0)) return;
+  if(no!==null&&(!isFinite(no)||no<0)) return;
+  if(vReady&&vid.duration){ if(ni!==null) ni=Math.min(ni,vid.duration); if(no!==null) no=Math.min(no,vid.duration); }
+  if(ni!==null&&no!==null&&no<=ni) return;
+  cIn=ni; cOut=no; _badges(); updClipRgn(); chkRun();
+}
+function _badges(){
+  const hi=cIn!==null, ho=cOut!==null, both=hi&&ho;
+  document.getElementById('cifIn').classList.toggle('set',hi);
+  document.getElementById('cifOut').classList.toggle('set',ho);
+  const bi=document.getElementById('badgeIn'), bo=document.getElementById('badgeOut');
+  bi.textContent='IN: '+(hi?fmt(cIn):'-'); bo.textContent='OUT: '+(ho?fmt(cOut):'-');
+  bi.classList.toggle('set',hi); bo.classList.toggle('set',ho);
+  document.getElementById('bClr').disabled=!(hi||ho||clipBlob);
+  document.getElementById('bXtr').disabled=!(both&&selPath);
+  if(both){ document.getElementById('clipDur').textContent='Duration: '+fmt(cOut-cIn); document.getElementById('clipDur').style.display='block'; }
+  else document.getElementById('clipDur').style.display='none';
+}
+function updClipUI(){
+  if(document.activeElement!==inInp)  inInp.value  = cIn!==null  ? fn(cIn)  : '';
+  if(document.activeElement!==outInp) outInp.value = cOut!==null ? fn(cOut) : '';
+  _badges(); updClipRgn(); chkRun();
+}
+function clrClip(){ cIn=cOut=null; clipBlob=null; if(clipObjUrl){URL.revokeObjectURL(clipObjUrl);clipObjUrl=null;} updClipUI(); toast('Clip cleared'); }
+inInp.addEventListener('input',applyInputs); outInp.addEventListener('input',applyInputs);
+
+async function extract(){
+  if(!selPath||cIn===null||cOut===null) return;
+  const s=document.getElementById('xtrMsg');
+  s.textContent='Extracting...'; s.className='csm';
+  document.getElementById('bXtr').disabled=true;
+  try{
+    const r=await fetch(BASE+'/clip',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({path:selPath,start:cIn,end:cOut})});
+    if(!r.ok){let m;try{m=(await r.json()).detail;}catch{m=r.statusText;}throw new Error(m);}
+    clipBlob=await r.blob();
+    if(clipObjUrl) URL.revokeObjectURL(clipObjUrl);
+    clipObjUrl=URL.createObjectURL(clipBlob);
+    vReady=false; vid.crossOrigin='anonymous'; vid.src=clipObjUrl; vid.load(); vid.currentTime=0;
+    resetFrame(); stage='video'; showVid();
+    const mb=(clipBlob.size/1024/1024).toFixed(2);
+    s.textContent='Done: '+mb+' MB - seek then Capture Frame'; s.className='csm ok';
+    toast('Clip extracted ('+mb+' MB)','ok');
+    cIn=null; cOut=null; updClipUI();
+  } catch(e){
+    s.textContent='Error: '+e.message; s.className='csm err';
+    toast('Extract failed: '+e.message,'err');
+    document.getElementById('bXtr').disabled=false; updClipUI();
+  }
+}
+
+// ─── stage (video / frame canvas) ───────────────────────────────────────────
+function updStageBtns(){
+  const hf=!!frmCnv;
+  document.getElementById('bFrm').disabled=!hf;
+  document.getElementById('bTog').disabled=!hf;
+  document.getElementById('bVid').classList.toggle('ba',stage==='video');
+  document.getElementById('bFrm').classList.toggle('ba',stage==='frame');
+}
+function showVid(){
+  stage='video';
+  cnv.style.display='none';
+  brushCnv.style.display='none';
+  cursorCnv.style.display='none';
+  vid.style.display='block'; vid.style.visibility='visible';
+  document.getElementById('sph').style.display=(!selPath&&!clipBlob)?'flex':'none';
+  updStageBtns();
+}
+function showFrm(){
+  if(!frmCnv){toast('Capture a frame first','err');return;}
+  stage='frame'; vid.pause(); vid.style.display='none';
+  cnv.style.display='block'; cnv.style.visibility='visible'; cnv.style.zIndex='10';
+  document.getElementById('sph').style.display='none';
+  // show brush canvas on top of frame canvas in brush/erase mode
+  const isBrushMode = (mode==='brush'||mode==='erase');
+  brushCnv.style.display = isBrushMode ? 'block' : 'none';
+  cursorCnv.style.display = isBrushMode ? 'block' : 'none';
+  renderCnv(); updStageBtns();
+}
+function togStage(){ if(!frmCnv) return; stage==='video'?showFrm():showVid(); }
+
+function capFrame(){
+  if(!vReady||!vid.videoWidth||!vid.videoHeight){toast('Video not ready','err');return;}
+  try{
+    const w=vid.videoWidth,h=vid.videoHeight,o=document.createElement('canvas');
+    o.width=w; o.height=h; o.getContext('2d').drawImage(vid,0,0,w,h);
+    frmCnv=o; fW=w; fH=h; bbox=null; updBbox();
+    document.getElementById('dims').textContent=w+'x'+h;
+    resetBrushState();
+    showFrm(); requestAnimationFrame(renderCnv);
+    toast('Frame captured','ok'); chkRun();
+  } catch(e){ toast('Capture failed: '+e.message,'err'); }
+}
+
+function renderCnv(){
+  if(!frmCnv) return;
+  const aW=document.getElementById('ca').clientWidth, aH=document.getElementById('ca').clientHeight;
+  const sc=Math.min(aW/fW,aH/fH);
+  iW=Math.floor(fW*sc); iH=Math.floor(fH*sc); iScale=sc;
+  iOx=Math.floor((aW-iW)/2); iOy=Math.floor((aH-iH)/2);
+  cnv.width=aW; cnv.height=aH;
+  ctx.clearRect(0,0,aW,aH); ctx.fillStyle='#000'; ctx.fillRect(0,0,aW,aH);
+  ctx.drawImage(frmCnv,iOx,iOy,iW,iH);
+  // draw bbox if in draw mode
+  if(mode==='draw'||mode==='view'){
+    const b=bbox||(drag?d2b():null);
+    if(b){
+      const x1=iOx+b.x1*iScale, y1=iOy+b.y1*iScale, x2=iOx+b.x2*iScale, y2=iOy+b.y2*iScale;
+      ctx.fillStyle='rgba(45,223,176,.08)'; ctx.fillRect(x1,y1,x2-x1,y2-y1);
+      ctx.strokeStyle='rgba(45,223,176,.95)'; ctx.lineWidth=2; ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+      const cs=8; ctx.fillStyle='rgba(45,223,176,1)';
+      [[x1,y1],[x2,y1],[x1,y2],[x2,y2]].forEach(([hx,hy])=>ctx.fillRect(hx-cs/2,hy-cs/2,cs,cs));
+      ctx.font='bold 11px JetBrains Mono,monospace'; ctx.fillStyle='rgba(45,223,176,1)';
+      ctx.fillText(Math.abs(Math.round(b.x2-b.x1))+'x'+Math.abs(Math.round(b.y2-b.y1)),x1+4,Math.max(14,y1-5));
+    }
+  }
+}
+
+// ─── BRUSH SYSTEM ────────────────────────────────────────────────────────────
+// We maintain a full-resolution offscreen buffer for the brush mask,
+// then composite it scaled onto brushCnv which sits above the frame canvas.
+
+let brushBuf = null;  // full-res offscreen canvas (imgW x imgH)
+
+function ensureBrushBuf(){
+  if(!brushBuf || brushBuf.width!==fW || brushBuf.height!==fH){
+    brushBuf = document.createElement('canvas');
+    brushBuf.width = fW; brushBuf.height = fH;
+  }
+  return brushBuf;
+}
+
+function resetBrushState(){
+  brushBuf = null;
+  brushUndoStack = [];
+  brushHasContent = false;
+  brushCtx.clearRect(0,0,brushCnv.width,brushCnv.height);
+  cursorCtx.clearRect(0,0,cursorCnv.width,cursorCnv.height);
+  updateBrushPxCount();
+}
+
+function syncBrushCanvas(){
+  // Composite the full-res brush buffer scaled into brushCnv
+  if(!frmCnv) return;
+  const aW=document.getElementById('ca').clientWidth, aH=document.getElementById('ca').clientHeight;
+  brushCnv.width = aW; brushCnv.height = aH;
+  brushCtx.clearRect(0,0,aW,aH);
+  if(brushBuf){
+    brushCtx.drawImage(brushBuf, iOx, iOy, iW, iH);
+  }
+}
+
+function canvas2image(ex, ey){
+  // Convert display coordinates to image pixel coordinates
+  const r = brushCnv.getBoundingClientRect();
+  return {
+    x: (ex - r.left  - iOx) / iScale,
+    y: (ey - r.top - iOy) / iScale,
+  };
+}
+
+function doBrushStroke(ex, ey){
+  const {x, y} = canvas2image(ex, ey);
+  const buf = ensureBrushBuf();
+  const bctx = buf.getContext('2d', {willReadFrequently: true});
+  const size = parseInt(document.getElementById('brushSize').value);
+  const opacity = parseInt(document.getElementById('brushOpacity').value) / 100;
+  const color = document.getElementById('brushColor').value;
+  const r = parseInt(color.slice(1,3),16);
+  const g = parseInt(color.slice(3,5),16);
+  const b = parseInt(color.slice(5,7),16);
+
+  bctx.save();
+  if(mode === 'erase'){
+    bctx.globalCompositeOperation = 'destination-out';
+    bctx.fillStyle = 'rgba(0,0,0,1)';
+  } else {
+    bctx.globalCompositeOperation = 'source-over';
+    bctx.fillStyle = `rgba(${r},${g},${b},${opacity})`;
+  }
+  bctx.beginPath();
+  bctx.arc(x, y, size/2, 0, Math.PI*2);
+  bctx.fill();
+  bctx.restore();
+
+  syncBrushCanvas();
+  updateBrushHasContent();
+  updateBrushPxCount();
+  chkRun();
+}
+
+function updateBrushHasContent(){
+  if(!brushBuf) { brushHasContent=false; return; }
+  const bctx = brushBuf.getContext('2d', {willReadFrequently:true});
+  const data = bctx.getImageData(0,0,fW,fH).data;
+  for(let i=3; i<data.length; i+=4){ if(data[i]>10){ brushHasContent=true; return; } }
+  brushHasContent = false;
+}
+
+function updateBrushPxCount(){
+  let cnt = 0;
+  if(brushBuf){
+    const bctx = brushBuf.getContext('2d',{willReadFrequently:true});
+    const data = bctx.getImageData(0,0,fW,fH).data;
+    for(let i=3;i<data.length;i+=4) if(data[i]>10) cnt++;
+  }
+  document.getElementById('brushPxCount').textContent = cnt.toLocaleString() + ' px painted';
+}
+
+function drawBrushCursor(ex, ey){
+  if(!frmCnv || (mode!=='brush'&&mode!=='erase')) return;
+  const r = brushCnv.getBoundingClientRect();
+  const cx = ex - r.left, cy = ey - r.top;
+  const displayRadius = (parseInt(document.getElementById('brushSize').value)/2) * iScale;
+  const aW = document.getElementById('ca').clientWidth;
+  const aH = document.getElementById('ca').clientHeight;
+  cursorCnv.width = aW; cursorCnv.height = aH;
+  cursorCtx.clearRect(0,0,aW,aH);
+  cursorCtx.save();
+  cursorCtx.strokeStyle = mode==='erase' ? 'rgba(230,100,100,0.9)' : 'rgba(255,95,135,0.9)';
+  cursorCtx.lineWidth = 1.5;
+  cursorCtx.setLineDash(mode==='erase' ? [4,3] : []);
+  cursorCtx.beginPath();
+  cursorCtx.arc(cx, cy, displayRadius, 0, Math.PI*2);
+  cursorCtx.stroke();
+  cursorCtx.restore();
+}
+
+function undoBrush(){
+  if(!brushUndoStack.length){ toast('Nothing to undo','warn'); return; }
+  const snap = brushUndoStack.pop();
+  const buf = ensureBrushBuf();
+  buf.getContext('2d',{willReadFrequently:true}).putImageData(snap, 0, 0);
+  syncBrushCanvas(); updateBrushHasContent(); updateBrushPxCount(); chkRun();
+  toast('Undone');
+}
+
+function clearBrushMask(){
+  if(brushBuf){
+    brushUndoStack.push(brushBuf.getContext('2d',{willReadFrequently:true}).getImageData(0,0,fW,fH));
+    brushBuf.getContext('2d',{willReadFrequently:true}).clearRect(0,0,fW,fH);
+  }
+  syncBrushCanvas(); brushHasContent=false; updateBrushPxCount(); chkRun();
+  toast('Brush mask cleared');
+}
+
+// Export brush mask as a PNG blob (binary foreground/background)
+function getBrushMaskPng(){
+  return new Promise(resolve => {
+    if(!brushBuf){ resolve(null); return; }
+    const tmp = document.createElement('canvas');
+    tmp.width = fW; tmp.height = fH;
+    const tctx = tmp.getContext('2d');
+    const src = brushBuf.getContext('2d',{willReadFrequently:true}).getImageData(0,0,fW,fH);
+    const out = tctx.createImageData(fW, fH);
+    for(let i=0;i<src.data.length;i+=4){
+      const a = src.data[i+3];
+      out.data[i] = 255; out.data[i+1] = 255; out.data[i+2] = 255;
+      out.data[i+3] = a > 10 ? 255 : 0;
+    }
+    tctx.putImageData(out, 0, 0);
+    tmp.toBlob(resolve, 'image/png');
+  });
+}
+
+// Brush canvas mouse events
+brushCnv.addEventListener('mousedown', e => {
+  if(!frmCnv || (mode!=='brush'&&mode!=='erase')) return;
+  // save undo snapshot before stroke begins
+  if(brushBuf){
+    brushUndoStack.push(brushBuf.getContext('2d',{willReadFrequently:true}).getImageData(0,0,fW,fH));
+    if(brushUndoStack.length>30) brushUndoStack.shift();
+  }
+  brushPainting = true;
+  doBrushStroke(e.clientX, e.clientY);
+  e.preventDefault();
+});
+brushCnv.addEventListener('mousemove', e => {
+  drawBrushCursor(e.clientX, e.clientY);
+  if(brushPainting) doBrushStroke(e.clientX, e.clientY);
+});
+brushCnv.addEventListener('mouseup',    () => { brushPainting=false; });
+brushCnv.addEventListener('mouseleave', () => {
+  brushPainting=false;
+  cursorCtx.clearRect(0,0,cursorCnv.width,cursorCnv.height);
+});
+
+// ─── box draw (unchanged) ─────────────────────────────────────────────────────
+function d2b(){ if(!dS||!dC) return null; return{x1:Math.min(dS.x,dC.x),y1:Math.min(dS.y,dC.y),x2:Math.max(dS.x,dC.x),y2:Math.max(dS.y,dC.y)}; }
+function c2i(e){ const r=cnv.getBoundingClientRect(); return{x:Math.max(0,Math.min(fW,(e.clientX-r.left-iOx)/iScale)),y:Math.max(0,Math.min(fH,(e.clientY-r.top-iOy)/iScale))}; }
+cnv.addEventListener('mousedown',e=>{if(!frmCnv||mode!=='draw')return;drag=true;dS=c2i(e);dC=dS;bbox=null;renderCnv();e.preventDefault();});
+cnv.addEventListener('mousemove',e=>{if(!drag)return;dC=c2i(e);renderCnv();});
+cnv.addEventListener('mouseup',e=>{if(!drag)return;drag=false;dC=c2i(e);const b=d2b();if(b&&Math.abs(b.x2-b.x1)>5&&Math.abs(b.y2-b.y1)>5){bbox=b;updBbox();chkRun();}dS=dC=null;renderCnv();});
+cnv.addEventListener('mouseleave',()=>{if(drag){drag=false;const b=d2b();if(b&&Math.abs(b.x2-b.x1)>5&&Math.abs(b.y2-b.y1)>5){bbox=b;updBbox();chkRun();}dS=dC=null;renderCnv();}});
+function clrBox(){ bbox=null; updBbox(); renderCnv(); chkRun(); }
+function updBbox(){
+  const bb=document.getElementById('bboxB'), bh=document.getElementById('bboxHint'),
+        bi=document.getElementById('bboxInfo'), bc=document.getElementById('bClrBox');
+  if(bbox){
+    const x1=Math.round(Math.min(bbox.x1,bbox.x2)), y1=Math.round(Math.min(bbox.y1,bbox.y2)),
+          x2=Math.round(Math.max(bbox.x1,bbox.x2)), y2=Math.round(Math.max(bbox.y1,bbox.y2));
+    document.getElementById('bbx1').textContent=x1; document.getElementById('bby1').textContent=y1;
+    document.getElementById('bbx2').textContent=x2; document.getElementById('bby2').textContent=y2;
+    document.getElementById('bbwh').textContent=(x2-x1)+' x '+(y2-y1)+' px';
+    bb.classList.add('set'); bh.style.display='none'; bi.textContent='box: ['+x1+','+y1+','+x2+','+y2+']'; bc.style.display='inline-flex';
+  } else {
+    bb.classList.remove('set'); bh.style.display='block'; bi.textContent=''; bc.style.display='none';
+  }
+}
+
+// ─── mode switching ───────────────────────────────────────────────────────────
+function setMode(m){
+  mode=m;
+  document.getElementById('mDraw').classList.toggle('active',m==='draw');
+  document.getElementById('mBrush').classList.toggle('active',m==='brush');
+  document.getElementById('mErase').classList.toggle('active',m==='erase');
+  document.getElementById('mView').classList.toggle('active',m==='view');
+
+  const isBrush = (m==='brush'||m==='erase');
+  document.getElementById('mErase').style.display = isBrush ? 'block' : 'none';
+  document.getElementById('brushControls').style.display = isBrush ? 'flex' : 'none';
+
+  // update canvas pointer events & cursor
+  cnv.style.pointerEvents    = m==='draw' ? 'auto' : 'none';
+  cnv.style.cursor           = m==='draw' ? 'crosshair' : 'default';
+  brushCnv.style.pointerEvents = isBrush ? 'auto' : 'none';
+  brushCnv.style.cursor        = isBrush ? 'none' : 'default';
+
+  if(stage==='frame'){
+    brushCnv.style.display  = isBrush ? 'block' : 'none';
+    cursorCnv.style.display = isBrush ? 'block' : 'none';
+    if(isBrush){
+      const aW=document.getElementById('ca').clientWidth, aH=document.getElementById('ca').clientHeight;
+      brushCnv.width=aW; brushCnv.height=aH;
+      cursorCnv.width=aW; cursorCnv.height=aH;
+      syncBrushCanvas();
+    }
+  }
+  chkRun();
+}
+
+window.addEventListener('resize',()=>{
+  if(frmCnv&&stage==='frame'){
+    renderCnv();
+    if(mode==='brush'||mode==='erase') syncBrushCanvas();
+  }
+});
+document.getElementById('mColor').addEventListener('input',function(){ document.getElementById('mColorHex').textContent=this.value; });
+
+// ─── run check ────────────────────────────────────────────────────────────────
+function chkRun(){
+  const hasVideo = !!(clipBlob||selPath);
+  const hasFrame = !!frmCnv;
+  const hasBox   = !!bbox;
+  const hasBrush = brushHasContent;
+  // can run if we have video+frame and (box OR brush)
+  document.getElementById('bRun').disabled = !(hasVideo && hasFrame && (hasBox || hasBrush));
+}
+
+// ─── projects ────────────────────────────────────────────────────────────────
+async function loadProjs(){
+  try{
+    const d = await fetch(BASE+'/projects').then(r=>r.json());
+    const html = d.projects.map(p=>`<option value="${p.name}">${p.name} (${p.n_pairs})</option>`).join('');
+    document.getElementById('projSel').innerHTML = '<option value="">- select -</option>'+html;
+    document.getElementById('cProj').innerHTML   = '<option value="">- select -</option>'+html;
+    if(curProj){ document.getElementById('projSel').value=curProj; document.getElementById('cProj').value=curProj; }
+  } catch(e){ toast('Projects load failed','err'); }
+}
+function syncCurateProjList(){
+  document.getElementById('cProj').innerHTML = document.getElementById('projSel').innerHTML;
+  if(curProj) document.getElementById('cProj').value = curProj;
+}
+function onProjSel(){
+  curProj = document.getElementById('projSel').value || null;
+  document.getElementById('projBadge').textContent = curProj ? '&#128230; '+curProj : 'No project';
+}
+async function mkProj(){
+  const name = document.getElementById('pName').value.trim();
+  if(!name){ toast('Enter a project name','err'); return; }
+  try{
+    const d = await fetch(BASE+'/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name,description:document.getElementById('pDesc').value.trim()})}).then(r=>r.json());
+    curProj=d.name;
+    document.getElementById('projBadge').textContent='&#128230; '+curProj;
+    toast('Created: '+d.name,'ok');
+    await loadProjs();
+    document.getElementById('projSel').value=curProj;
+    document.getElementById('pName').value=''; document.getElementById('pDesc').value='';
+  } catch(e){ toast('Create failed: '+e.message,'err'); }
+}
+
+// ─── SAM2 tracking ────────────────────────────────────────────────────────────
+async function runSAM2(){
+  if(!frmCnv) return toast('Capture a frame first','err');
+
+  // decide whether to use brush or bbox
+  const useBrush = brushHasContent;
+  const useBbox  = !!bbox;
+
+  if(!useBrush && !useBbox) return toast('Draw a bounding box or paint a brush mask first','err');
+
+  let blob=clipBlob;
+  if(!blob){
+    toast('No clip - fetching full video...','warn',5000);
+    try{ blob=await fetch(BASE+'/video?path='+encodeURIComponent(selPath)).then(r=>r.blob()); }
+    catch(e){ return toast('Cannot fetch video: '+e.message,'err'); }
+  }
+
+  const hex=document.getElementById('mColor').value;
+  const cr=parseInt(hex.slice(1,3),16), cg=parseInt(hex.slice(3,5),16), cb=parseInt(hex.slice(5,7),16);
+  const fd=new FormData();
+  fd.append('video',blob,'clip.mp4');
+  fd.append('mask_alpha',document.getElementById('mAlpha').value);
+  fd.append('mask_r',String(cr)); fd.append('mask_g',String(cg)); fd.append('mask_b',String(cb));
+  fd.append('draw_box',document.getElementById('dBox').checked?'true':'false');
+  fd.append('sample_fps',document.getElementById('sFps').value);
+
+  let endpoint;
+  if(useBrush){
+    const maskBlob = await getBrushMaskPng();
+    if(!maskBlob) return toast('Failed to export brush mask','err');
+    fd.append('mask_png', maskBlob, 'mask.png');
+    fd.append('src_width', String(fW));
+    fd.append('src_height', String(fH));
+    endpoint = '/track_brush';
+    toast('Using brush mask prompt...','ok',2000);
+  } else {
+    const x1=Math.round(Math.min(bbox.x1,bbox.x2)), y1=Math.round(Math.min(bbox.y1,bbox.y2)),
+          x2=Math.round(Math.max(bbox.x1,bbox.x2)), y2=Math.round(Math.max(bbox.y1,bbox.y2));
+    fd.append('x1',String(x1)); fd.append('y1',String(y1));
+    fd.append('x2',String(x2)); fd.append('y2',String(y2));
+    fd.append('src_width',String(fW)); fd.append('src_height',String(fH));
+    endpoint = '/track';
+    toast('Using bounding box prompt...','ok',2000);
+  }
+
+  const prg=document.getElementById('prg');
+  prg.style.display='flex'; prg.style.flexDirection='column';
+  document.getElementById('resArea').style.display='none';
+  document.getElementById('bRun').disabled=true;
+  document.getElementById('prgMsg').textContent='Uploading & running SAM2...';
+  let fp=5;
+  const ft=setInterval(()=>{ fp=Math.min(fp+1.5,90); document.getElementById('prgFill').style.width=fp+'%'; },800);
+  try{
+    const r=await fetch(BASE+endpoint,{method:'POST',body:fd});
+    clearInterval(ft);
+    if(!r.ok){let m;try{m=(await r.json()).detail||r.statusText;}catch{m=r.statusText;}throw new Error(m);}
+    document.getElementById('prgFill').style.width='100%';
+    document.getElementById('prgMsg').textContent='Done!';
+    await new Promise(x=>setTimeout(x,300));
+    const data=await r.json();
+    curJob=data.job_id;
+    const rv=document.getElementById('resVid');
+    rv.src=BASE+'/track_result/'+data.job_id+'/overlay.mp4'; rv.load();
+    rv.oncanplay=()=>{ rv.play().catch(()=>{}); rv.oncanplay=null; };
+    document.getElementById('resInfo').textContent=data.n_frames+' frames · '+data.vid_w+'x'+data.vid_h+' · job: '+data.job_id;
+    document.getElementById('resArea').style.display='block';
+    prg.style.display='none';
+    document.getElementById('bRun').disabled=false;
+    toast('Tracking complete - '+data.n_frames+' frames','ok',4000);
+    await refreshCurate();
+  } catch(e){
+    clearInterval(ft); prg.style.display='none'; document.getElementById('bRun').disabled=false;
+    toast('Inference failed: '+e.message,'err',6000);
+  }
+}
+
+// ─── CURATE ───────────────────────────────────────────────────────────────────
+async function refreshCurate(){
+  if(!curJob){
+    document.getElementById('cEmpty').style.display='block';
+    document.getElementById('cGrid').innerHTML='';
+    document.getElementById('cJob').textContent='-';
+    cStates=[]; cShown=[];
+    updCurateCounts(); return;
+  }
+  document.getElementById('cEmpty').style.display='none';
+  document.getElementById('cJob').textContent=curJob;
+  try{
+    curateMf = await fetch(BASE+'/track_result/'+curJob+'/manifest').then(r=>r.json());
+    cStates = curateMf.frames
+      .filter(f => f.has_mask)
+      .map(f => ({ ...f, included: true }));
+    updSampleOpts();
+    applyRate();
+    updateRatePreview();
+  } catch(e){
+    toast('Manifest load failed: '+e.message,'err');
+    document.getElementById('cEmpty').style.display='block';
+  }
+}
+
+function getCurateFps(){
+  const cRateEl = document.getElementById('cRate');
+  if(cRateEl.value === 'custom'){
+    return parseFloat(document.getElementById('cRateCustom').value) || 0;
+  }
+  return parseFloat(cRateEl.value) || 0;
+}
+
+function onCurateRateChange(){
+  const cRateEl      = document.getElementById('cRate');
+  const curateRateEl = document.getElementById('curateRate');
+  const customEl     = document.getElementById('cRateCustom');
+  const isCustom = cRateEl.value === 'custom';
+  customEl.style.display = isCustom ? 'inline-block' : 'none';
+  if(!isCustom && curateRateEl.value !== cRateEl.value){
+    const opt = [...curateRateEl.options].find(o=>o.value===cRateEl.value);
+    if(opt) curateRateEl.value = cRateEl.value;
+  }
+  updateRatePreview();
+}
+
+function onTrackRateChange(){
+  const curateRateEl = document.getElementById('curateRate');
+  const cRateEl      = document.getElementById('cRate');
+  const opt = [...cRateEl.options].find(o=>o.value===curateRateEl.value);
+  if(opt) cRateEl.value = curateRateEl.value;
+  document.getElementById('cRateCustom').style.display = 'none';
+  updateRatePreview();
+  if(curateMf) applyRate();
+}
+
+function updateRatePreview(){
+  const el = document.getElementById('curateRatePreview');
+  if(!curateMf){ el.textContent='- run tracking first'; return; }
+  const fps = getCurateFps();
+  const count = computeShownCount(fps);
+  const baseFps = (curateMf.sample_fps>0?curateMf.sample_fps:curateMf.vid_fps)||30;
+  if(!fps || fps >= baseFps){
+    el.textContent = `${cStates.length} frames (all)`;
+  } else {
+    el.textContent = `${count} frames shown`;
+  }
+}
+
+function computeShownCount(targetFps){
+  if(!cStates.length) return 0;
+  const baseFps = (curateMf.sample_fps>0?curateMf.sample_fps:curateMf.vid_fps)||30;
+  if(!targetFps || targetFps >= baseFps) return cStates.length;
+  const interval = baseFps / targetFps;
+  let count=0, next=0;
+  for(let i=0;i<cStates.length;i++){
+    const origIdx = cStates[i].original_frame_idx;
+    if(origIdx >= next){ count++; next = origIdx + interval; }
+  }
+  return count;
+}
+
+function updSampleOpts(){
+  const allOpt = document.querySelector('#cRate option[value="0"]');
+  if(allOpt) allOpt.textContent = `All frames (${cStates.length})`;
+  const curateRateEl = document.getElementById('curateRate');
+  const cRateEl      = document.getElementById('cRate');
+  const opt = [...cRateEl.options].find(o=>o.value===curateRateEl.value);
+  if(opt) cRateEl.value = curateRateEl.value;
+  updateRatePreview();
+}
+
+function applyRate(){
+  if(!curateMf || !cStates.length){ cShown=[]; updCurateCounts(); renderGrid(); return; }
+  const targetFps = getCurateFps();
+  const baseFps   = (curateMf.sample_fps>0?curateMf.sample_fps:curateMf.vid_fps)||30;
+  if(!targetFps || targetFps >= baseFps){
+    cShown = cStates.map((_,i)=>i);
+  } else {
+    const interval = baseFps / targetFps;
+    cShown = [];
+    let nextOrig = 0;
+    for(let i=0;i<cStates.length;i++){
+      const origIdx = cStates[i].original_frame_idx;
+      if(origIdx >= nextOrig){
+        cShown.push(i);
+        nextOrig = origIdx + interval;
+      }
+    }
+  }
+  updCurateCounts();
+  renderGrid();
+}
+
+function updCurateCounts(){
+  const shown   = cShown.length;
+  const total   = cStates.length;
+  const incl    = cShown.filter(i=>cStates[i].included).length;
+  const excl    = cShown.filter(i=>!cStates[i].included).length;
+  document.getElementById('cShown').textContent    = shown;
+  document.getElementById('cTotal').textContent    = total;
+  document.getElementById('cCntShown').textContent = shown;
+  document.getElementById('cCntIncl').textContent  = incl;
+  document.getElementById('cCntExcl').textContent  = excl;
+}
+
+function overlayUrl(fs){
+  const hex   = (document.getElementById('mColor').value||'#4facde').replace('#','');
+  const alpha = parseFloat(document.getElementById('mAlpha').value)||0.45;
+  const dbox  = document.getElementById('dBox').checked?'true':'false';
+  return BASE+'/track_result/'+curJob
+    +'/overlay_frame/'+encodeURIComponent(fs.frame)+'/'+encodeURIComponent(fs.mask)
+    +'?alpha='+alpha+'&color='+hex+'&draw_box='+dbox;
+}
+
+function renderGrid(){
+  const g    = document.getElementById('cGrid');
+  const view = document.getElementById('cView').value;
+  g.innerHTML = '';
+  if(!cShown.length){
+    document.getElementById('cEmpty').style.display = 'block';
+    return;
+  }
+  document.getElementById('cEmpty').style.display = 'none';
+  for(const si of cShown){
+    const fs = cStates[si];
+    const card = document.createElement('div');
+    card.className = 'cc ' + (fs.included ? 'included' : 'excluded');
+    const thumb = document.createElement('div');
+    thumb.className = 'cthumb loading';
+    const img = document.createElement('img');
+    img.className = 'ci'; img.loading='lazy'; img.alt='';
+    img.onload  = () => thumb.classList.remove('loading');
+    img.onerror = () => thumb.classList.remove('loading');
+    if(view === 'frame')    img.src = BASE+'/track_result/'+curJob+'/frame/'+fs.frame;
+    else if(view === 'mask') img.src = BASE+'/track_result/'+curJob+'/mask/'+fs.mask;
+    else                    img.src = overlayUrl(fs)+'&_t='+(Date.now());
+    const pvBtn = document.createElement('button');
+    pvBtn.type = 'button'; pvBtn.className = 'pvbtn'; pvBtn.textContent = '&#9974;';
+    pvBtn.title = 'Full-size preview';
+    pvBtn.addEventListener('click', e => { e.stopPropagation(); openPreview(si); });
+    thumb.appendChild(img); thumb.appendChild(pvBtn);
+    const ck = document.createElement('div');
+    ck.className = 'ck'; ck.textContent = fs.included ? '&#10003;' : '&#10005;';
+    const ft = document.createElement('div');
+    ft.className = 'cf';
+    ft.innerHTML = '<span class="cidx">#'+fs.idx+'</span><span>orig: '+fs.original_frame_idx+'</span>';
+    card.appendChild(thumb); card.appendChild(ck); card.appendChild(ft);
+    g.appendChild(card);
+    card.addEventListener('click', () => {
+      fs.included = !fs.included;
+      card.className = 'cc ' + (fs.included ? 'included' : 'excluded');
+      ck.textContent = fs.included ? '&#10003;' : '&#10005;';
+      updCurateCounts();
+    });
+  }
+}
+
+function selAll(){  cShown.forEach(i => { cStates[i].included = true; }); updCurateCounts(); renderGrid(); }
+function deselAll(){ cShown.forEach(i => { cStates[i].included = false; }); updCurateCounts(); renderGrid(); }
+function exclSelected(){ cShown.forEach(i => { if(cStates[i].included) cStates[i].included = false; }); updCurateCounts(); renderGrid(); }
+function restAll(){ cStates.forEach(s => { s.included = true; }); updCurateCounts(); renderGrid(); }
+
+async function savePairs(mode='selected'){
+  const proj = document.getElementById('cProj').value;
+  if(!proj){ toast('Select a project first','err'); return false; }
+  if(!curJob){ toast('No tracking job','err'); return false; }
+  let indices;
+  if(mode === 'all'){
+    indices = cShown.map(i => cStates[i].idx);
+  } else {
+    indices = cShown.filter(i => cStates[i].included).map(i => cStates[i].idx);
+  }
+  if(!indices.length){ toast(mode==='all' ? 'No shown frames to save' : 'No included frames to save','err'); return false; }
+  const pfx   = document.getElementById('cPfx').value.trim() || curJob;
+  const sm    = document.getElementById('saveMsg');
+  const btnIds = ['bSaveSel','bSaveAll','bSaveTopSel','bSaveTopAll'];
+  sm.textContent = 'Saving...'; sm.style.color='var(--text-dim)';
+  btnIds.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=true; });
+  try{
+    const resp = await fetch(BASE+'/save_pairs',{
+      method: 'POST', headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({job_id:curJob, project_name:proj, frame_indices:indices, prefix:pfx})
+    });
+    const d = await resp.json();
+    if(!resp.ok) throw new Error(d.detail || resp.statusText || 'Save failed');
+    sm.textContent = `Saved ${d.saved} pairs · ${d.total_in_project} total in project`;
+    sm.style.color='var(--green)';
+    toast(`Saved ${d.saved} masks to "${proj}"`, 'ok', 4500);
+    loadProjs(); return true;
+  } catch(e){
+    sm.textContent = 'Error: '+e.message; sm.style.color='var(--danger)';
+    toast('Save failed: '+e.message,'err'); return false;
+  } finally{
+    btnIds.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=false; });
+  }
+}
+
+function openPreview(si){
+  const fs    = cStates[si];
+  const modal = document.getElementById('pvModal');
+  const pc    = document.getElementById('pvCan');
+  const info  = document.getElementById('pvInfo');
+  info.textContent = `Frame #${fs.idx} · orig ${fs.original_frame_idx} · Loading...`;
+  modal.classList.add('show');
+  const view = document.getElementById('cView').value;
+  const url  = view==='frame' ? BASE+'/track_result/'+curJob+'/frame/'+fs.frame
+             : view==='mask'  ? BASE+'/track_result/'+curJob+'/mask/'+fs.mask
+             : overlayUrl(fs);
+  fetch(url).then(r=>r.blob()).then(b=>createImageBitmap(b)).then(bmp=>{
+    const W=bmp.width, H=bmp.height;
+    const sc=Math.min(window.innerWidth*.9/W, window.innerHeight*.8/H, 1);
+    const dw=Math.floor(W*sc), dh=Math.floor(H*sc);
+    pc.width=dw; pc.height=dh;
+    pc.getContext('2d').drawImage(bmp,0,0,dw,dh);
+    info.textContent=`Frame #${fs.idx} · orig ${fs.original_frame_idx} · ${W}x${H}`;
+  }).catch(()=>{ info.textContent=`Failed to load frame #${fs.idx}`; });
+}
+function closePvModal(e){
+  if(!e || e.target===document.getElementById('pvModal')){
+    document.getElementById('pvModal').classList.remove('show');
+  }
+}
+
+// ─── keyboard shortcuts ───────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  if(['INPUT','TEXTAREA','SELECT'].includes(e.target.tagName)) return;
+  if(e.code==='Space'){     e.preventDefault(); tplay(); }
+  if(e.code==='ArrowLeft'){ e.preventDefault(); seek(-(parseFloat(document.getElementById('skipAmt').value)||1)); }
+  if(e.code==='ArrowRight'){e.preventDefault(); seek( parseFloat(document.getElementById('skipAmt').value)||1); }
+  if(e.code==='KeyI') setIn();
+  if(e.code==='KeyO') setOut();
+  if(e.code==='KeyC') capFrame();
+  if(e.code==='KeyT') togStage();
+  if(e.code==='KeyB') setMode('brush');
+  if(e.code==='BracketLeft'){
+    const el=document.getElementById('brushSize');
+    el.value=Math.max(+el.min||4,+el.value-4);
+    document.getElementById('brushSizeVal').textContent=el.value;
+  }
+  if(e.code==='BracketRight'){
+    const el=document.getElementById('brushSize');
+    el.value=Math.min(+el.max||120,+el.value+4);
+    document.getElementById('brushSizeVal').textContent=el.value;
+  }
+  if(e.code==='Escape'){
+    if(document.getElementById('pvModal').classList.contains('show'))
+      document.getElementById('pvModal').classList.remove('show');
+    else { clrBox(); }
+  }
+});
+
+// ─── bootstrap ────────────────────────────────────────────────────────────────
+init(); loadProjs(); setMode('draw'); showVid(); updStageBtns();
+</script>
+</body>
+</html>
