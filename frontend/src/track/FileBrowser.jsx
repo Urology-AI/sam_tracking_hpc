@@ -45,7 +45,7 @@ export default function FileBrowser({ selPath, onSelectFile }) {
   const handleClick = useCallback((entry) => {
     if (entry.type === 'dir') {
       browse(entry.path);
-    } else if (entry.type === 'file' && isVideo(entry.name)) {
+    } else if (entry.type === 'video') {
       onSelectFile(entry.path);
     } else {
       toast('Not a supported video file', 'warn');
@@ -77,8 +77,8 @@ export default function FileBrowser({ selPath, onSelectFile }) {
         )}
 
         {entries.map((entry) => {
-          const isVid = entry.type === 'file' && isVideo(entry.name);
-          const isSelected = entry.type === 'file' && selPath === entry.path;
+          const isVid = entry.type === 'video';
+          const isSelected = entry.type === 'video' && selPath === entry.path;
           return (
             <div
               key={entry.path}
@@ -90,7 +90,7 @@ export default function FileBrowser({ selPath, onSelectFile }) {
                 {entry.type === 'dir' ? '📁' : isVid ? '🎬' : '📄'}
               </span>
               <span className="browser-entry-name">{entry.name}</span>
-              {entry.type === 'file' && (
+              {entry.size_mb !== undefined && (
                 <span className="browser-entry-size">{fmtSize(entry.size_mb)}</span>
               )}
             </div>
